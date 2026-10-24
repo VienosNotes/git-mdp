@@ -1,0 +1,206 @@
+// 差分情報から、統合表示と更新後のみの表示を含む単体 HTML を生成する
+import { readFileSync } from 'node:fs';
+import MarkdownIt from 'markdown-it';
+import type Token from 'markdown-it/lib/token.mjs';
+import type { DocLine, FileDiff, LineKind } from './diff.js';
+
+export type Mode = 'merged' | 'new';
+
+interface RenderEnv {
+  lines: DocLine[];
+}
+
+const md = createMarkdownIt();
+
+function createMarkdownIt(): MarkdownIt {
+  // html は既定の false のまま。文書中の HTML タグは文字として表示する
+  const md = new MarkdownIt();
+  md.core.ruler.push('md_diff_annotate', (state) => {
+    annotate(state.tokens, (state.env as RenderEnv).lines);
+  });
+
+  const defaultText = md.renderer.rules.text!;
+  md.renderer.rules.text = (tokens, idx, options, env, self) => {
+    const html = defaultText(tokens, idx, options, env, self);
+    return wrapLine(html, tokens[idx], env);
+  };
+  const defaultCodeInline = md.renderer.rules.code_inline!;
+  md.renderer.rules.code_inline = (tokens, idx, options, env, self) => {
+    const html = defaultCodeInline(tokens, idx, options, env, self);
+    return wrapLine(html, tokens[idx], env);
+  };
+  const defaultFence = md.renderer.rules.fence!;
+  md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+    const t = tokens[idx];
+    if (t.meta?.codeFrom === undefined) return defaultFence(tokens, idx, options, env, self);
+    const lang = t.info.trim().split(/\s+/)[0];
+    const cls = lang ? ` class="language-${md.utils.escapeHtml(lang)}"` : '';
+    return `<pre${self.renderAttrs(t)}><code${cls}>${codeLines(t, env)}</code></pre>\n`;
+  };
+  const defaultCodeBlock = md.renderer.rules.code_block!;
+  md.renderer.rules.code_block = (tokens, idx, options, env, self) => {
+    const t = tokens[idx];
+    if (t.meta?.codeFrom === undefined) return defaultCodeBlock(tokens, idx, options, env, self);
+    return `<pre${self.renderAttrs(t)}><code>${codeLines(t, env)}</code></pre>\n`;
+  };
+  return md;
+}
+
+// ブロックに行範囲と装飾を付け、装飾しきれないブロックには行単位の情報を付ける
+function annotate(tokens: Token[], lines: DocLine[]): void {
+  const marked: boolean[] = []; // 祖先のブロックが装飾済みか
+  let lastLine = 0; // map を持たないトークン（表のセルなど）用の直近の行
+  for (const t of tokens) {
+    if (t.nesting === -1) {
+      marked.pop();
+      continue;
+    }
+    const inMarked = marked.length > 0 && marked[marked.length - 1];
+    let isMarked = inMarked;
+    if (t.map && t.type !== 'inline') {
+      lastLine = t.map[0];
+      t.attrSet('data-ls', String(t.map[0]));
+      t.attrSet('data-le', String(t.map[1]));
+      if (!inMarked) {
+        const kind = blockKind(lines, t.map[0], t.map[1]);
+        if (kind) {
+          t.attrJoin('class', `md-${kind}`);
+          isMarked = true;
+        } else if (t.type === 'fence') {
+          t.meta = { codeFrom: t.map[0] + 1 };
+        } else if (t.type === 'code_block') {
+          t.meta = { codeFrom: t.map[0] };
+        }
+      }
+    }
+    if (t.type === 'inline' && !isMarked && t.children) {
+      // softbreak / hardbreak の数から各テキストのソース行を求める
+      let line = t.map ? t.map[0] : lastLine;
+      for (const c of t.children) {
+        if (c.type === 'softbreak' || c.type === 'hardbreak') line++;
+        else c.meta = { line };
+      }
+    }
+    if (t.nesting === 1) marked.push(isMarked);
+  }
+}
+
+// 空行を除く全行が同じ変更ならその種類を返す
+function blockKind(lines: DocLine[], start: number, end: number): Exclude<LineKind, 'same'> | null {
+  let kind: LineKind | null = null;
+  for (let i = start; i < end && i < lines.length; i++) {
+    if (lines[i].text.trim() === '') continue;
+    if (lines[i].kind === 'same') return null;
+    if (kind && kind !== lines[i].kind) return null;
+    kind = lines[i].kind;
+  }
+  return kind === 'same' ? null : kind;
+}
+
+function wrapLine(html: string, t: Token, env: RenderEnv): string {
+  const line = t.meta?.line;
+  if (line === undefined) return html;
+  const kind = env.lines[line]?.kind;
+  if (kind !== 'del' && kind !== 'add') return html;
+  return `<span class="md-${kind}" data-l="${line}">${html}</span>`;
+}
+
+function codeLines(t: Token, env: RenderEnv): string {
+  const from: number = t.meta.codeFrom;
+  const content = t.content.endsWith('\n') ? t.content.slice(0, -1) : t.content;
+  return content
+    .split('\n')
+    .map((text, i) => {
+      const escaped = md.utils.escapeHtml(text);
+      const kind = env.lines[from + i]?.kind;
+      if (kind !== 'del' && kind !== 'add') return escaped;
+      return `<span class="md-${kind} md-code-line" data-l="${from + i}">${escaped}</span>`;
+    })
+    .join('\n') + '\n';
+}
+
+// 表示モードごとの本文の行
+function modeLines(lines: DocLine[], mode: Mode): DocLine[] {
+  return mode === 'merged' ? lines : lines.filter((l) => l.kind !== 'del');
+}
+
+// 各 hunk のマークを置く行（表示モードの本文での 0 始まりの行番号）。
+// 表示される変更行がなければ、変更位置の直後の行を指す
+function hunkTargets(file: FileDiff, mode: Mode): number[] {
+  const visibleAt: number[] = file.hunks.map(() => -1);
+  const changeAt: number[] = file.hunks.map(() => -1);
+  let modeIdx = 0;
+  for (const l of file.lines) {
+    const visible = mode === 'merged' || l.kind !== 'del';
+    if (l.hunk >= 0 && l.kind !== 'same') {
+      if (changeAt[l.hunk] < 0) changeAt[l.hunk] = modeIdx;
+      if (visible && visibleAt[l.hunk] < 0) visibleAt[l.hunk] = modeIdx;
+    }
+    if (visible) modeIdx++;
+  }
+  return visibleAt.map((v, i) => (v >= 0 ? v : changeAt[i]));
+}
+
+function hunkKind(file: FileDiff, hunk: number): 'add' | 'del' | 'mix' {
+  const lines = file.hunks[hunk].lines;
+  const hasDel = lines.some((l) => l.mark === '-');
+  const hasAdd = lines.some((l) => l.mark === '+');
+  return hasDel && hasAdd ? 'mix' : hasDel ? 'del' : 'add';
+}
+
+export function renderBody(file: FileDiff, mode: Mode): string {
+  const lines = modeLines(file.lines, mode);
+  const env: RenderEnv = { lines };
+  return md.render(lines.map((l) => l.text).join('\n'), env);
+}
+
+const assetUrl = (name: string) => new URL(`../../assets/${name}`, import.meta.url);
+
+export function renderPage(file: FileDiff): string {
+  const esc = md.utils.escapeHtml;
+  const data = {
+    hunks: file.hunks.map((h, i) => ({
+      header: h.header,
+      lines: h.lines,
+      kind: hunkKind(file, i),
+      target: { merged: hunkTargets(file, 'merged')[i], new: hunkTargets(file, 'new')[i] },
+    })),
+  };
+  // JSON 内の "<" をエスケープし、"</script>" や "<!--" で HTML の構造が壊れないようにする
+  const json = JSON.stringify(data).replace(/</g, '\\u003c');
+  const css = readFileSync(assetUrl('style.css'), 'utf8');
+  const js = readFileSync(assetUrl('client.js'), 'utf8');
+  const section = (mode: Mode) =>
+    `<section class="doc" data-mode="${mode}"${mode === 'new' ? ' hidden' : ''}>
+<div class="gutter"></div>
+<div class="markdown-body">
+${renderBody(file, mode)}</div>
+<div class="doc-end"></div>
+</section>`;
+  return `<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(file.path)} - md-diff</title>
+<style>
+${css}</style>
+</head>
+<body>
+<header class="toolbar">
+<span class="file-path">${esc(file.path)}</span>
+<span class="hunk-count">${file.hunks.length} hunks</span>
+<button type="button" id="mode-toggle"></button>
+</header>
+<main>
+${section('merged')}
+${section('new')}
+</main>
+<div id="popup" hidden></div>
+<script type="application/json" id="md-diff-data">${json}</script>
+<script>
+${js}</script>
+</body>
+</html>
+`;
+}

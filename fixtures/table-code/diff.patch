@@ -1,0 +1,36 @@
+diff --git a/before.md b/after.md
+index 376d75b..583dda8 100644
+--- a/before.md
++++ b/after.md
+@@ -3,12 +3,13 @@
+ | 名前 | 値 |
+ |---|---|
+ | a | 1 |
+-| b | 2 |
++| b | 20 |
+ | c | 3 |
++| d | 4 |
+ 
+ ヘッダーを変える表。
+ 
+-| 列1 | 列2 |
++| 列1 | 列2（改） |
+ |---|---|
+ | x | y |
+ 
+@@ -16,12 +17,12 @@
+ 
+ ```js
+ const a = 1;
+-const b = 2;
++const b = 3;
+ console.log(a + b);
+ ```
+ 
+ フェンスの変更。
+ 
+-```js
+-function f() {}
++```ts
++function f(): void {}
+ ```

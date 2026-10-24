@@ -1,0 +1,15 @@
+diff --git a/before.md b/after.md
+index e4ff3aa..79c5e9a 100644
+--- a/before.md
++++ b/after.md
+@@ -3,8 +3,9 @@
+ 参照リンクは[こちら][ref]。
+ 
+ 段落一。
++
+ 段落二。
+ 
+ 段落三。
+ 
+-[ref]: https://example.com/old
++[ref]: https://example.com/new
