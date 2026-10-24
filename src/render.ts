@@ -219,7 +219,9 @@ function hunkKind(file: FileDiff, hunk: number): 'add' | 'del' | 'mix' {
 export function renderBody(file: FileDiff, mode: Mode, split: boolean): string {
   const lines = modeLines(file.lines, mode);
   const env: RenderEnv = { lines, split };
-  return md.render(lines.map((l) => l.text).join('\n'), env);
+  // 先頭の BOM は見出しなどの解釈を妨げるため取り除く
+  const source = lines.map((l) => l.text).join('\n').replace(/^\uFEFF/, '');
+  return md.render(source, env);
 }
 
 const assetUrl = (name: string) => new URL(`../../assets/${name}`, import.meta.url);
