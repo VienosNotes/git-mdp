@@ -3,7 +3,7 @@
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { buildFileDiff } from './diff.js';
-import { repoRoot, toRepoPath, fileDiff, type Comparison } from './git.js';
+import { repoRoot, toRepoPath, collectFileDiffs, type Comparison } from './git.js';
 import { renderPage } from './render.js';
 
 class UsageError extends Error {}
@@ -38,7 +38,6 @@ function parseArgs(argv: string[]): Options {
     }
   }
   if (!output) throw new UsageError('--output で出力先を指定してください');
-  if (paths.length !== 1) throw new UsageError('-- の後に対象の Markdown ファイルを一つ指定してください');
   if (cached && revision !== undefined) throw new UsageError('--cached とリビジョンは併用できません');
   let comparison: Comparison = cached ? { kind: 'cached' } : { kind: 'worktree' };
   if (revision !== undefined) {
@@ -57,14 +56,17 @@ function main(argv: string[]): number {
   const opts = parseArgs(argv);
   const cwd = process.cwd();
   const root = repoRoot(cwd);
-  const path = toRepoPath(root, cwd, opts.paths[0]);
-  if (!/\.(md|markdown)$/i.test(path)) throw new UsageError(`Markdown ファイルを指定してください: ${path}`);
-  const { oldText, patch } = fileDiff(root, path, opts.comparison);
-  const file = buildFileDiff(path, oldText, patch);
-  if (file.hunks.length === 0) {
+  const paths = opts.paths.map((path) => toRepoPath(root, cwd, path));
+  const files = collectFileDiffs(root, opts.comparison, paths);
+  if (files.length === 0) {
     console.error('差分はありません');
     return 0;
   }
+  // 複数文書の HTML 統合は 3c で実装する。先頭だけを出して残りを失わない
+  if (files.length > 1) throw new UsageError('複数ファイルの表示は未対応です。-- の後で一つのファイルに絞ってください');
+  const change = files[0];
+  const path = change.status === 'R' ? `${change.oldPath} → ${change.newPath}` : (change.newPath ?? change.oldPath)!;
+  const file = buildFileDiff(path, change.oldText, change.patch);
   const out = resolve(cwd, opts.output);
   try {
     writeFileSync(out, renderPage(file));
