@@ -3,13 +3,14 @@
   const data = JSON.parse(document.getElementById('md-diff-data').textContent);
   const popup = document.getElementById('popup');
   const toggle = document.getElementById('mode-toggle');
+  const splitToggle = document.getElementById('split-toggle');
   const MODE_LABEL = { merged: '統合表示', new: '更新後のみ' };
   const MARK_HEIGHT = 18;
   let mode = 'merged';
   let pinned = null; // 固定中の hunk 番号
   let hideTimer = 0;
 
-  const docOf = (m) => document.querySelector(`.doc[data-mode="${m}"]`);
+  const docOf = (m) => document.querySelector(`.doc[data-mode="${m}"][data-split="${splitToggle.checked}"]`);
 
   // 指定行を含む最も内側の要素。なければ直後の要素、それもなければ文末
   function anchorFor(doc, line) {
@@ -33,6 +34,7 @@
 
   function layout() {
     const doc = docOf(mode);
+    if (!doc) return;
     const gutter = doc.querySelector('.gutter');
     gutter.textContent = '';
     const base = doc.getBoundingClientRect().top;
@@ -123,7 +125,8 @@
 
   function setMode(m) {
     mode = m;
-    for (const doc of document.querySelectorAll('.doc')) doc.hidden = doc.dataset.mode !== m;
+    const current = docOf(m);
+    for (const doc of document.querySelectorAll('.doc')) doc.hidden = doc !== current;
     toggle.textContent = `表示: ${MODE_LABEL[m]}（切り替え）`;
     document.body.dataset.mode = m;
     unpin();
@@ -131,6 +134,7 @@
   }
 
   toggle.addEventListener('click', () => setMode(mode === 'merged' ? 'new' : 'merged'));
+  splitToggle.addEventListener('change', () => setMode(mode));
   new ResizeObserver(() => layout()).observe(document.querySelector('main'));
   setMode('merged');
 })();

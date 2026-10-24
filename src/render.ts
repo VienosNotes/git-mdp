@@ -8,6 +8,7 @@ export type Mode = 'merged' | 'new';
 
 interface RenderEnv {
   lines: DocLine[];
+  split: boolean; // 変更行を独立した段落に分割するか
 }
 
 const md = createMarkdownIt();
@@ -15,6 +16,10 @@ const md = createMarkdownIt();
 function createMarkdownIt(): MarkdownIt {
   // html は既定の false のまま。文書中の HTML タグは文字として表示する
   const md = new MarkdownIt();
+  md.core.ruler.push('md_diff_split', (state) => {
+    const env = state.env as RenderEnv;
+    if (env.split) state.tokens = splitParagraphs(state.tokens, env.lines, state.Token);
+  });
   md.core.ruler.push('md_diff_annotate', (state) => {
     annotate(state.tokens, (state.env as RenderEnv).lines);
   });
@@ -85,6 +90,69 @@ function annotate(tokens: Token[], lines: DocLine[]): void {
   }
 }
 
+// リスト外の段落を、変更なし・削除・追加の連続する行ごとに別の段落へ分割する。
+// 分割位置をまたぐ強調やリンクは、そこでいったん閉じて次の段落で開き直す
+function splitParagraphs(tokens: Token[], lines: DocLine[], TokenClass: typeof Token): Token[] {
+  const result: Token[] = [];
+  let listDepth = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.type === 'bullet_list_open' || t.type === 'ordered_list_open') listDepth++;
+    if (t.type === 'bullet_list_close' || t.type === 'ordered_list_close') listDepth--;
+    const inline = tokens[i + 1];
+    if (t.type !== 'paragraph_open' || listDepth > 0 || !t.map || !inline?.children) {
+      result.push(t);
+      continue;
+    }
+    const kindOf = (line: number) => lines[line]?.kind ?? 'same';
+    let line = t.map[0];
+    let start = line;
+    let children: Token[] = [];
+    const open: Token[] = []; // 開いている強調やリンク
+    const flush = (end: number) => {
+      for (const o of [...open].reverse()) {
+        children.push(new TokenClass(o.type.replace(/_open$/, '_close'), o.tag, -1));
+      }
+      const p = new TokenClass('paragraph_open', 'p', 1);
+      p.map = [start, end];
+      p.block = true;
+      const body = new TokenClass('inline', '', 0);
+      body.map = [start, end];
+      body.children = children;
+      body.content = '';
+      const close = new TokenClass('paragraph_close', 'p', -1);
+      close.block = true;
+      result.push(p, body, close);
+      children = open.map((o) => {
+        const copy = new TokenClass(o.type, o.tag, 1);
+        copy.attrs = o.attrs;
+        copy.markup = o.markup;
+        return copy;
+      });
+      start = end;
+    };
+    for (const c of inline.children) {
+      if ((c.type === 'softbreak' || c.type === 'hardbreak') && kindOf(line + 1) !== kindOf(line)) {
+        line++;
+        flush(line);
+        continue;
+      }
+      if (c.type === 'softbreak' || c.type === 'hardbreak') line++;
+      if (c.nesting === 1) open.push(c);
+      if (c.nesting === -1) open.pop();
+      children.push(c);
+    }
+    if (start === t.map[0]) {
+      // 分割が不要な段落はそのまま残す
+      result.push(t);
+      continue;
+    }
+    flush(t.map[1]);
+    i += 2; // inline と paragraph_close は置き換え済み
+  }
+  return result;
+}
+
 // 空行を除く全行が同じ変更ならその種類を返す
 function blockKind(lines: DocLine[], start: number, end: number): Exclude<LineKind, 'same'> | null {
   let kind: LineKind | null = null;
@@ -148,9 +216,9 @@ function hunkKind(file: FileDiff, hunk: number): 'add' | 'del' | 'mix' {
   return hasDel && hasAdd ? 'mix' : hasDel ? 'del' : 'add';
 }
 
-export function renderBody(file: FileDiff, mode: Mode): string {
+export function renderBody(file: FileDiff, mode: Mode, split: boolean): string {
   const lines = modeLines(file.lines, mode);
-  const env: RenderEnv = { lines };
+  const env: RenderEnv = { lines, split };
   return md.render(lines.map((l) => l.text).join('\n'), env);
 }
 
@@ -170,11 +238,12 @@ export function renderPage(file: FileDiff): string {
   const json = JSON.stringify(data).replace(/</g, '\\u003c');
   const css = readFileSync(assetUrl('style.css'), 'utf8');
   const js = readFileSync(assetUrl('client.js'), 'utf8');
-  const section = (mode: Mode) =>
-    `<section class="doc" data-mode="${mode}"${mode === 'new' ? ' hidden' : ''}>
+  // 既定は統合表示で、変更行を独立して表示する
+  const section = (mode: Mode, split: boolean) =>
+    `<section class="doc" data-mode="${mode}" data-split="${split}"${mode === 'merged' && split ? '' : ' hidden'}>
 <div class="gutter"></div>
 <div class="markdown-body">
-${renderBody(file, mode)}</div>
+${renderBody(file, mode, split)}</div>
 <div class="doc-end"></div>
 </section>`;
   return `<!doctype html>
@@ -190,11 +259,14 @@ ${css}</style>
 <header class="toolbar">
 <span class="file-path">${esc(file.path)}</span>
 <span class="hunk-count">${file.hunks.length} hunks</span>
+<label><input type="checkbox" id="split-toggle" checked> 変更行を独立して表示</label>
 <button type="button" id="mode-toggle"></button>
 </header>
 <main>
-${section('merged')}
-${section('new')}
+${section('merged', true)}
+${section('merged', false)}
+${section('new', true)}
+${section('new', false)}
 </main>
 <div id="popup" hidden></div>
 <script type="application/json" id="md-diff-data">${json}</script>
