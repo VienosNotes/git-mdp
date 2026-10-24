@@ -1,0 +1,11 @@
+diff --git a/before.md b/after.md
+index d460c50..973fd95 100644
+--- a/before.md
++++ b/after.md
+@@ -1,4 +1,4 @@
+ # 末尾改行
+ 
+ 本文。
+-最終行
+\ No newline at end of file
++最終行を変更

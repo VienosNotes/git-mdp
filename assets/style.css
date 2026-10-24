@@ -1,0 +1,100 @@
+:root {
+  --fg: #1f2328;
+  --bg: #ffffff;
+  --muted: #59636e;
+  --border: #d1d9e0;
+  --del-bg: #ffebe9;
+  --del-fg: #82071e;
+  --add-bg: #dafbe1;
+  --add-fg: #116329;
+  --mix: #9a6700;
+  --code-bg: #f6f8fa;
+  --gutter: 56px;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  color: var(--fg);
+  background: var(--bg);
+  font-family: -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  line-height: 1.7;
+}
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--code-bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.file-path { font-weight: 600; }
+.hunk-count { color: var(--muted); }
+#mode-toggle { margin-left: auto; font: inherit; padding: 2px 10px; cursor: pointer; }
+
+main { max-width: 960px; margin: 0 auto; padding: 16px; }
+
+.doc { position: relative; padding-left: var(--gutter); min-height: 4em; }
+.gutter { position: absolute; left: 0; top: 0; width: calc(var(--gutter) - 12px); }
+.doc-end { height: 1.5em; border-top: 1px dashed var(--border); margin-top: 1em; }
+
+.mark {
+  position: absolute;
+  right: 0;
+  height: 16px;
+  min-width: 28px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 16px;
+  color: #fff;
+  cursor: pointer;
+}
+.mark-add { background: var(--add-fg); }
+.mark-del { background: var(--del-fg); }
+.mark-mix { background: var(--mix); }
+
+/* 本文 */
+.markdown-body table { border-collapse: collapse; }
+.markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: 4px 12px; }
+.markdown-body pre { background: var(--code-bg); padding: 12px; overflow: auto; line-height: 1.45; }
+.markdown-body code { font-family: ui-monospace, Consolas, monospace; font-size: 90%; }
+.markdown-body blockquote { margin-left: 0; padding-left: 1em; border-left: 4px solid var(--border); color: var(--muted); }
+
+/* 差分の装飾 */
+.md-del { background: var(--del-bg); color: var(--del-fg); text-decoration: line-through; text-decoration-color: rgba(130, 7, 30, 0.4); }
+.md-add { background: var(--add-bg); }
+.md-code-line { display: inline-block; min-width: 100%; }
+.md-focus { outline: 2px solid var(--mix); outline-offset: 2px; }
+
+/* diff ポップアップ */
+#popup {
+  position: absolute;
+  z-index: 20;
+  min-width: 320px;
+  max-width: min(720px, calc(100vw - 100px));
+  max-height: 60vh;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  font-size: 13px;
+}
+#popup.pinned { border-color: var(--mix); }
+.popup-head { position: sticky; top: 0; display: flex; justify-content: space-between; gap: 8px; padding: 4px 8px; background: var(--code-bg); color: var(--muted); font-family: ui-monospace, Consolas, monospace; }
+.popup-close { border: none; background: none; cursor: pointer; font-size: 14px; visibility: hidden; }
+#popup.pinned .popup-close { visibility: visible; }
+#popup pre { margin: 0; padding: 4px 0; font-family: ui-monospace, Consolas, monospace; line-height: 1.45; }
+#popup pre span { display: block; padding: 0 8px; white-space: pre-wrap; }
+.pl-del { background: var(--del-bg); }
+.pl-add { background: var(--add-bg); }
+.pl-note { color: var(--muted); font-style: italic; }
