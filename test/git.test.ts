@@ -41,9 +41,9 @@ function run(cwd: string, args: string[], e = env) {
 }
 
 // 生成した HTML から埋め込みデータを取り出す
-function generate(cwd: string, path: string, e = env) {
+function generate(cwd: string, path: string, e = env, comparison: string[] = []) {
   const out = join(tmp, `out${repoSeq}-${Math.random()}.html`);
-  const r = run(cwd, ['--output', out, '--', path], e);
+  const r = run(cwd, ['--output', out, ...comparison, '--', path], e);
   assert.equal(r.status, 0, r.stderr);
   const html = readFileSync(out, 'utf8');
   const json = /<script type="application\/json" id="md-diff-data">(.*?)<\/script>/s.exec(html)![1];
@@ -143,7 +143,7 @@ test('誤った入力やエラーを非 0 で通知する', () => {
   const cases: [string, string[], number, RegExp][] = [
     ['出力先なし', ['--', 'doc.md'], 2, /--output/],
     ['パスなし', ['--output', out], 2, /--/],
-    ['未対応の引数', ['--output', out, 'HEAD', '--', 'doc.md'], 2, /未対応/],
+    ['未対応の引数', ['--output', out, '--unknown', '--', 'doc.md'], 2, /未対応/],
     ['Markdown 以外', ['--output', out, '--', 'note.txt'], 2, /Markdown/],
     ['未追跡', ['--output', out, '--', 'new.md'], 1, /追跡/],
     ['存在しない', ['--output', out, '--', 'none.md'], 1, /追跡/],
@@ -160,4 +160,74 @@ test('誤った入力やエラーを非 0 で通知する', () => {
   const r = run(outside, ['--output', out, '--', 'doc.md']);
   assert.equal(r.status, 1);
   assert.match(r.stderr, /リポジトリ内で実行/);
+});
+
+
+test('cached と指定コミットがそれぞれ正しい本文を比較する', () => {
+  const dir = newRepo({ 'doc.md': '# 版1\n' });
+  write(dir, 'doc.md', '# 版2\n');
+  sh(dir, 'add', 'doc.md');
+  sh(dir, 'commit', '-q', '-m', 'second');
+  write(dir, 'doc.md', '# 版3\n');
+  sh(dir, 'add', 'doc.md');
+  write(dir, 'doc.md', '# 版4\n');
+  for (const [args, old, next] of [
+    [[], '版3', '版4'],
+    [['--cached'], '版2', '版3'],
+    [['HEAD~1'], '版1', '版4'],
+  ] as [string[], string, string][]) {
+    const { data } = generate(dir, 'doc.md', env, args);
+    const expected = sh(dir, 'diff', '-U3', ...args, '--', 'doc.md');
+    assert.equal(popupText(data), expected.slice(expected.indexOf('@@')));
+    assert.deepEqual(data.hunks[0].lines.map((l) => l.mark + l.text), [`-# ${old}`, `+# ${next}`]);
+  }
+});
+
+test('三点比較は共通祖先と tip を使い index と作業ツリーを参照しない', () => {
+  const dir = newRepo({ 'doc.md': '# 共通\n' });
+  sh(dir, 'branch', 'base');
+  sh(dir, 'checkout', '-q', '-b', 'feature');
+  write(dir, 'doc.md', '# feature\n');
+  sh(dir, 'add', '.');
+  sh(dir, 'commit', '-q', '-m', 'feature');
+  sh(dir, 'checkout', '-q', 'base');
+  write(dir, 'doc.md', '# base\n');
+  sh(dir, 'add', '.');
+  sh(dir, 'commit', '-q', '-m', 'base');
+  write(dir, 'doc.md', '# index\n');
+  sh(dir, 'add', '.');
+  write(dir, 'doc.md', '# worktree\n');
+  const { data } = generate(dir, 'doc.md', env, ['base...feature']);
+  const expected = sh(dir, 'diff', '-U3', 'base...feature', '--', 'doc.md');
+  assert.equal(popupText(data), expected.slice(expected.indexOf('@@')));
+  assert.deepEqual(data.hunks[0].lines.map((l) => l.mark + l.text), ['-# 共通', '+# feature']);
+});
+
+test('比較モードの誤った指定と存在しないリビジョンを通知する', () => {
+  const dir = newRepo({ 'doc.md': 'a\n' });
+  const out = join(tmp, 'invalid-comparison.html');
+  for (const args of [['--cached', 'HEAD'], ['HEAD', 'HEAD~1'], ['HEAD..HEAD'], ['...HEAD']]) {
+    const r = run(dir, ['--output', out, ...args, '--', 'doc.md']);
+    assert.equal(r.status, 2, r.stderr);
+  }
+  const r = run(dir, ['--output', out, 'no-such-revision', '--', 'doc.md']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /rev-parse/);
+});
+
+test('cached と三点比較で差分がなければ正常終了する', () => {
+  const dir = newRepo({ 'doc.md': 'a\n' });
+  const out = join(tmp, 'no-comparison-diff.html');
+  for (const args of [['--cached'], ['HEAD...HEAD']]) {
+    const r = run(dir, ['--output', out, ...args, '--', 'doc.md']);
+    assert.equal(r.status, 0, r.stderr);
+    assert.match(r.stderr, /差分はありません/);
+    assert.equal(existsSync(out), false);
+  }
+});
+
+test('二つのドットで始まるリポジトリ内のファイルを扱える', () => {
+  const dir = newRepo({ '..notes.md': 'a\n' });
+  write(dir, '..notes.md', 'b\n');
+  assert.equal(generate(dir, '..notes.md').data.hunks.length, 1);
 });

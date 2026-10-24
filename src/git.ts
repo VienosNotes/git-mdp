@@ -5,6 +5,12 @@ import { relative, resolve, sep } from 'node:path';
 
 export class GitError extends Error {}
 
+export type Comparison =
+  | { kind: 'worktree' }
+  | { kind: 'cached' }
+  | { kind: 'revision'; ref: string }
+  | { kind: 'three-dot'; base: string; tip: string };
+
 const CONFIG_OVERRIDES = [
   '-c', 'core.quotePath=false',
   '-c', 'diff.suppressBlankEmpty=false',
@@ -41,24 +47,41 @@ export function repoRoot(cwd: string): string {
 // 実行ディレクトリからのパスを、リポジトリのルートからの '/' 区切りのパスにする
 export function toRepoPath(root: string, cwd: string, path: string): string {
   const rel = relative(realpathSync(root), resolve(realpathSync(cwd), path));
-  if (rel === '' || rel.startsWith('..') || resolve(rel) === rel) {
+  if (rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || resolve(rel) === rel) {
     throw new GitError(`リポジトリ外のパスです: ${path}`);
   }
   return rel.split(sep).join('/');
 }
 
-// index と作業ツリーを比較する一ファイル分の変更前の本文とパッチ
-export function worktreeDiff(root: string, path: string): { oldText: string; patch: string } {
-  const tracked = git(['ls-files', '-z', '--', path], root).split('\0').filter((p) => p !== '');
+// 選択した比較対象から、一ファイル分の変更前の本文とパッチを取得する
+export function fileDiff(root: string, path: string, comparison: Comparison): { oldText: string; patch: string } {
+  const commit = (ref: string) => git(['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`], root).trim();
+  let source = '';
+  let revisions: string[] = [];
+  if (comparison.kind === 'cached') {
+    source = commit('HEAD');
+    revisions = ['--cached', source];
+  } else if (comparison.kind === 'revision') {
+    source = commit(comparison.ref);
+    revisions = [source];
+  } else if (comparison.kind === 'three-dot') {
+    const base = commit(comparison.base);
+    const tip = commit(comparison.tip);
+    source = git(['merge-base', base, tip], root).trim();
+    revisions = [source, tip];
+  }
+  // 比較元にないファイルの追加は 3b で扱う
+  const tracked = git(source ? ['ls-tree', '--name-only', '-z', source, '--', path] : ['ls-files', '-z', '--', path], root)
+    .split('\0').filter((p) => p !== '');
   if (tracked.length !== 1 || tracked[0] !== path) {
     throw new GitError(`追跡されているファイルではありません: ${path}`);
   }
-  if (git(['ls-files', '-u', '--', path], root) !== '') {
+  if (comparison.kind !== 'three-dot' && git(['ls-files', '-u', '--', path], root) !== '') {
     throw new GitError(`競合中のファイルには対応していません: ${path}`);
   }
-  const patch = git(['diff', ...DIFF_OPTIONS, '--', path], root);
+  const patch = git(['diff', ...DIFF_OPTIONS, ...revisions, '--', path], root);
   if (/^(Binary files .* differ|GIT binary patch)$/m.test(patch)) {
     throw new GitError(`バイナリファイルには対応していません: ${path}`);
   }
-  return { oldText: git(['cat-file', 'blob', `:${path}`], root), patch };
+  return { oldText: git(['cat-file', 'blob', `${source}:${path}`], root), patch };
 }
