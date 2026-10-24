@@ -31,11 +31,30 @@ export interface FileDiff {
 
 const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 
-// 一ファイル分のパッチから hunk を取り出す。ヘッダー部分は読み飛ばす
+// 一ファイル分のパッチから hunk を取り出す。ヘッダー部分は読み飛ばす。
+// hunk の終わりはヘッダーの行数で判断する（空の文脈行が空行で出力される設定もあるため）
 export function parsePatch(patch: string): Hunk[] {
   const hunks: Hunk[] = [];
   let current: Hunk | null = null;
+  let oldLeft = 0;
+  let newLeft = 0;
   for (const line of splitLines(patch)) {
+    if (current && line.startsWith('\\')) {
+      // 末尾改行に関する注記は、直前の行の後に付く
+      current.lines.push({ mark: '\\', text: line.slice(1) });
+      continue;
+    }
+    if (current && (oldLeft > 0 || newLeft > 0)) {
+      const mark = line === '' ? ' ' : line[0];
+      if (mark === '-' && oldLeft > 0) oldLeft--;
+      else if (mark === '+' && newLeft > 0) newLeft--;
+      else if (mark === ' ' && oldLeft > 0 && newLeft > 0) {
+        oldLeft--;
+        newLeft--;
+      } else throw new Error(`パッチの形式が不正: ${line}`);
+      current.lines.push({ mark: mark as HunkLine['mark'], text: line.slice(1) });
+      continue;
+    }
     const m = HUNK_HEADER.exec(line);
     if (m) {
       current = {
@@ -44,20 +63,12 @@ export function parsePatch(patch: string): Hunk[] {
         oldCount: m[2] === undefined ? 1 : Number(m[2]),
         lines: [],
       };
+      oldLeft = current.oldCount;
+      newLeft = m[4] === undefined ? 1 : Number(m[4]);
       hunks.push(current);
-      continue;
-    }
-    if (!current) continue;
-    const mark = line[0];
-    if (mark === ' ' || mark === '-' || mark === '+' || mark === '\\') {
-      current.lines.push({ mark, text: line.slice(1) });
-    } else if (line === '') {
-      // 末尾の空要素など。空の文脈行は ' ' 付きで出力されるため、ここには来ない
-    } else {
-      // 次のファイルのヘッダーなど。一ファイル分のみ扱う
-      current = null;
     }
   }
+  if (oldLeft > 0 || newLeft > 0) throw new Error('パッチが途中で終わっている');
   return hunks;
 }
 
