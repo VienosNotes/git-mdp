@@ -49,7 +49,7 @@ function generate(cwd: string, path: string, e = env, comparison: string[] = [])
   assert.equal(r.status, 0, r.stderr);
   const html = readFileSync(out, 'utf8');
   const json = /<script type="application\/json" id="md-diff-data">(.*?)<\/script>/s.exec(html)![1];
-  return { html, data: JSON.parse(json) as { hunks: { header: string; lines: { mark: string; text: string }[] }[] } };
+  return { html, data: JSON.parse(json).files[0] as { hunks: { header: string; lines: { mark: string; text: string }[] }[] } };
 }
 
 // ポップアップに出す内容を、git diff の hunk 部分と同じ形式にする
@@ -365,15 +365,19 @@ test('対象の競合とバイナリは明示的なエラー、対象外なら�
   assert.equal(changes(binary, { kind: 'worktree' }, ['ok.md']).length, 1);
 });
 
-test('CLI はパス省略と絞り込みに対応し、複数文書を黙って省略しない', () => {
+test('CLI はパス省略と絞り込みに対応し、複数文書をまとめて表示する', () => {
   const dir = newRepo({ 'a.md': 'a\n', 'b.md': 'b\n' });
   write(dir, 'a.md', '変更\n');
   const out = join(tmp, 'enumerated.html');
   assert.equal(run(dir, ['--output', out]).status, 0);
   write(dir, 'b.md', '変更\n');
   const r = run(dir, ['--output', out]);
-  assert.equal(r.status, 2);
-  assert.match(r.stderr, /複数ファイル/);
+  assert.equal(r.status, 0, r.stderr);
+  const html = readFileSync(out, 'utf8');
+  const data = JSON.parse(/<script type="application\/json" id="md-diff-data">(.*?)<\/script>/s.exec(html)![1]);
+  assert.deepEqual(data.files.map((f: { path: string }) => f.path), ['a.md', 'b.md']);
+  assert.match(html, /href="#file-0"/);
+  assert.match(html, /href="#file-1"/);
   for (const path of ['none.md', '*.md']) {
     const filtered = run(dir, ['--output', out, '--', path]);
     assert.equal(filtered.status, 0);
@@ -416,4 +420,25 @@ test('改行や引用符を含むファイル名でもパッチの対応が崩�
   assert.equal(result.length, 1);
   assert.equal(result[0].oldPath, name);
   assert.equal(restored(result[0]), '変更');
+});
+
+
+test('CLI は空ファイルの追加・削除と本文変更なしのリネームも表示する', () => {
+  for (const emptyStatus of ['add', 'delete']) {
+    const dir = newRepo({ 'old.md': '移動\n', ...(emptyStatus === 'delete' ? { 'empty.md': '' } : {}) });
+    sh(dir, 'mv', 'old.md', 'new.md');
+    if (emptyStatus === 'delete') sh(dir, 'rm', '-q', 'empty.md');
+    else write(dir, 'empty.md', '');
+    sh(dir, 'add', '.');
+    const out = join(tmp, `status-only-${emptyStatus}.html`);
+    const r = run(dir, ['--cached', '--output', out]);
+    assert.equal(r.status, 0, r.stderr);
+    const html = readFileSync(out, 'utf8');
+    assert.match(html, /empty.md/);
+    assert.match(html, /old.md → new.md/);
+    assert.match(html, /本文の変更はありません/);
+    assert.match(html, /空のファイルです/);
+    assert.ok(html.includes(emptyStatus === 'add' ? '追加' : '削除'));
+    assert.match(html, /リネーム/);
+  }
 });

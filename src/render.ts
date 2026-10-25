@@ -226,49 +226,70 @@ export function renderBody(file: FileDiff, mode: Mode, split: boolean): string {
 
 const assetUrl = (name: string) => new URL(`../../assets/${name}`, import.meta.url);
 
-export function renderPage(file: FileDiff): string {
+export function renderPage(input: FileDiff | FileDiff[]): string {
+  const files = Array.isArray(input) ? input : [input];
   const esc = md.utils.escapeHtml;
+  const labels = { A: '追加', D: '削除', M: '変更', R: 'リネーム' };
+  const statusOf = (file: FileDiff) => file.change?.status ?? 'M';
   const data = {
-    hunks: file.hunks.map((h, i) => ({
-      header: h.header,
-      lines: h.lines,
-      kind: hunkKind(file, i),
-      target: { merged: hunkTargets(file, 'merged')[i], new: hunkTargets(file, 'new')[i] },
-    })),
+    files: files.map((file) => {
+      const merged = hunkTargets(file, 'merged');
+      const updated = hunkTargets(file, 'new');
+      return {
+        path: file.path,
+        hunks: file.hunks.map((h, i) => ({
+          header: h.header,
+          lines: h.lines,
+          kind: hunkKind(file, i),
+          target: { merged: merged[i], new: updated[i] },
+        })),
+      };
+    }),
   };
   // JSON 内の "<" をエスケープし、"</script>" や "<!--" で HTML の構造が壊れないようにする
   const json = JSON.stringify(data).replace(/</g, '\\u003c');
   const css = readFileSync(assetUrl('style.css'), 'utf8');
   const js = readFileSync(assetUrl('client.js'), 'utf8');
   // 既定は統合表示で、変更行を独立して表示する
-  const section = (mode: Mode, split: boolean) =>
+  const section = (file: FileDiff, mode: Mode, split: boolean) =>
     `<section class="doc" data-mode="${mode}" data-split="${split}"${mode === 'merged' && split ? '' : ' hidden'}>
 <div class="gutter"></div>
 <div class="markdown-body">
 ${renderBody(file, mode, split)}</div>
 <div class="doc-end"></div>
 </section>`;
+  const document = (file: FileDiff, i: number) => {
+    const status = statusOf(file);
+    const stateOnly = status === 'R' && file.hunks.length === 0;
+    const note = stateOnly ? '本文の変更はありません。' : file.lines.length === 0 ? '空のファイルです。' : '';
+    return `<article class="file" id="file-${i}" data-file="${i}">
+<header class="file-header"><h2>${esc(file.path)}</h2><span class="file-status">${labels[status]}</span><span class="hunk-count">${file.hunks.length} hunks</span></header>
+${note ? `<p class="file-note">${note}</p>` : ''}
+${stateOnly ? '' : section(file, 'merged', true) + section(file, 'merged', false) + section(file, 'new', true) + section(file, 'new', false)}
+</article>`;
+  };
+  const hunkCount = files.reduce((sum, file) => sum + file.hunks.length, 0);
+  const title = files.length === 1 ? files[0].path : `${files.length} ファイル`;
   return `<!doctype html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(file.path)} - md-diff</title>
+<title>${esc(title)} - md-diff</title>
 <style>
 ${css}</style>
 </head>
 <body>
 <header class="toolbar">
-<span class="file-path">${esc(file.path)}</span>
-<span class="hunk-count">${file.hunks.length} hunks</span>
+<span>${files.length} ファイル / ${hunkCount} hunks</span>
 <label><input type="checkbox" id="split-toggle" checked> 変更行を独立して表示</label>
 <button type="button" id="mode-toggle"></button>
 </header>
 <main>
-${section('merged', true)}
-${section('merged', false)}
-${section('new', true)}
-${section('new', false)}
+<nav class="file-list" aria-label="変更ファイル"><ul>
+${files.map((file, i) => `<li><a href="#file-${i}">${esc(file.path)}</a> <span class="file-status">${labels[statusOf(file)]}</span></li>`).join('\n')}
+</ul></nav>
+${files.map(document).join('\n')}
 </main>
 <div id="popup" hidden></div>
 <script type="application/json" id="md-diff-data">${json}</script>

@@ -29,13 +29,19 @@ body {
   z-index: 10;
   display: flex;
   gap: 16px;
+  flex-wrap: wrap;
   align-items: center;
   padding: 8px 16px;
   background: var(--code-bg);
   border-bottom: 1px solid var(--border);
   font-size: 14px;
 }
-.file-path { font-weight: 600; }
+.file-list { margin-bottom: 24px; overflow-wrap: anywhere; }
+.file { margin-bottom: 32px; scroll-margin-top: 100px; }
+.file-header { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.file-header h2 { font-size: 18px; margin: 8px 0; overflow-wrap: anywhere; }
+.file-status, .file-note { color: var(--muted); }
+.file-note { padding-left: var(--gutter); }
 .hunk-count { color: var(--muted); }
 #mode-toggle { margin-left: auto; font: inherit; padding: 2px 10px; cursor: pointer; }
 

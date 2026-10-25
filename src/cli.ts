@@ -62,14 +62,15 @@ function main(argv: string[]): number {
     console.error('差分はありません');
     return 0;
   }
-  // 複数文書の HTML 統合は 3c で実装する。先頭だけを出して残りを失わない
-  if (files.length > 1) throw new UsageError('複数ファイルの表示は未対応です。-- の後で一つのファイルに絞ってください');
-  const change = files[0];
-  const path = change.status === 'R' ? `${change.oldPath} → ${change.newPath}` : (change.newPath ?? change.oldPath)!;
-  const file = buildFileDiff(path, change.oldText, change.patch);
+  const documents = files.map((change) => {
+    const path = change.status === 'R' ? `${change.oldPath} → ${change.newPath}` : (change.newPath ?? change.oldPath)!;
+    const file = buildFileDiff(path, change.oldText, change.patch);
+    file.change = { status: change.status, oldPath: change.oldPath, newPath: change.newPath };
+    return file;
+  });
   const out = resolve(cwd, opts.output);
   try {
-    writeFileSync(out, renderPage(file));
+    writeFileSync(out, renderPage(documents));
   } catch (e) {
     throw new Error(`HTML を保存できません: ${(e as Error).message}`);
   }
