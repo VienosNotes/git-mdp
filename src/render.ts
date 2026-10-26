@@ -263,12 +263,17 @@ ${renderBody(file, mode, split)}</div>
     const status = statusOf(file);
     const stateOnly = status === 'R' && file.hunks.length === 0;
     const note = stateOnly ? '本文の変更はありません。' : file.lines.length === 0 ? '空のファイルです。' : '';
-    return `<article class="file" id="file-${i}" data-file="${i}">
-<header class="file-header"><h2>${esc(file.path)}</h2><span class="file-status">${labels[status]}</span><span class="hunk-count">${file.hunks.length} hunks</span></header>
+    return `<article class="file${collapsed(file) ? ' collapsed' : ''}" id="file-${i}" data-file="${i}">
+<header class="file-header">${collapseButton(file)}<h2>${esc(file.path)}</h2><span class="file-status">${labels[status]}</span><span class="hunk-count">${file.hunks.length} hunks</span></header>
 ${note ? `<p class="file-note">${note}</p>` : ''}
 ${stateOnly ? '' : section(file, 'merged', true) + section(file, 'merged', false) + section(file, 'new', true) + section(file, 'new', false)}
 </article>`;
   };
+  // 削除されたファイルは折りたたんだ状態で表示する
+  const collapsed = (file: FileDiff) => statusOf(file) === 'D';
+  const collapseButton = (file: FileDiff) => collapsed(file)
+    ? '<button type="button" class="collapse-toggle" aria-expanded="false" aria-label="展開する">▶</button>'
+    : '<button type="button" class="collapse-toggle" aria-expanded="true" aria-label="折りたたむ">▼</button>';
   const hunkCount = files.reduce((sum, file) => sum + file.hunks.length, 0);
   const title = files.length === 1 ? files[0].path : `${files.length} ファイル`;
   return `<!doctype html>
@@ -291,10 +296,10 @@ ${customCss}
 <label><input type="checkbox" id="split-toggle" checked> 変更行を独立して表示</label>
 <button type="button" id="mode-toggle"></button>
 </header>
-<main>
 <nav class="file-list" aria-label="変更ファイル"><ul>
-${files.map((file, i) => `<li><a href="#file-${i}">${esc(file.path)}</a> <span class="file-status">${labels[statusOf(file)]}</span></li>`).join('\n')}
+${files.map((file, i) => `<li data-file="${i}"${collapsed(file) ? ' class="collapsed"' : ''}><a href="#file-${i}">${esc(file.path)}</a> <span class="file-status">${labels[statusOf(file)]}</span></li>`).join('\n')}
 </ul></nav>
+<main>
 ${files.map(document).join('\n')}
 </main>
 <div id="popup" hidden></div>

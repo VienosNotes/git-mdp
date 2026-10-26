@@ -36,7 +36,18 @@ body {
   border-bottom: 1px solid var(--border);
   font-size: 14px;
 }
-.file-list { margin-bottom: 24px; overflow-wrap: anywhere; }
+/* 目次。広い画面では本文の左に固定し、狭い画面では本文の上に置く */
+.file-list { max-width: 960px; margin: 16px auto 0; padding: 0 16px; overflow-wrap: anywhere; }
+.file-list ul { margin: 0; padding-left: 1.2em; }
+.file-list li { padding: 1px 4px; border-radius: 3px; }
+.file-list li.current { background: var(--code-bg); font-weight: 600; }
+.file-list li.collapsed a { color: var(--muted); }
+@media (min-width: 1100px) {
+  body { padding-left: 260px; }
+  .file-list { position: fixed; top: 0; bottom: 0; left: 0; width: 260px; max-width: none; margin: 0; padding: 12px 8px; overflow-y: auto; border-right: 1px solid var(--border); background: var(--bg); font-size: 14px; }
+}
+.collapse-toggle { align-self: center; border: none; background: none; cursor: pointer; color: var(--muted); font-size: 14px; padding: 0 4px; }
+.file.collapsed > :not(.file-header) { display: none; }
 .file { margin-bottom: 32px; scroll-margin-top: calc(var(--toolbar-height, 48px) + 8px); }
 .file-header { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
 .file-header h2 { font-size: 18px; margin: 8px 0; overflow-wrap: anywhere; }
