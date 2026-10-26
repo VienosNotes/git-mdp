@@ -9,8 +9,6 @@ Git で管理している Markdown 文書の差分を、レンダリングした
 - Node.js 22 以上
 - Git
 
-macOS と Linux を想定している。Windows では動作を確認していない。
-
 ## 導入
 
 ```sh
