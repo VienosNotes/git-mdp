@@ -60,7 +60,8 @@
       mark.className = `mark mark-${hunks[it.i].kind}`;
       mark.style.top = `${y}px`;
       mark.textContent = String(it.i + 1);
-      mark.title = hunks[it.i].header;
+      // title はブラウザのツールチップがポップアップと重なるため使わず、読み上げ用の名前だけ付ける
+      mark.setAttribute('aria-label', hunks[it.i].header);
       mark.addEventListener('mouseenter', () => {
         it.anchor.classList.add('md-focus');
         if (pinned === null) show(fileIndex, it.i, mark);
@@ -99,11 +100,29 @@
     close.addEventListener('click', unpin);
     head.appendChild(close);
     const pre = document.createElement('pre');
-    for (const l of h.lines) {
+    // hunk ヘッダーの開始行から、各行の変更前・変更後の行番号を数える
+    const m = /^@@ -(\d+)(?:,\d+)? \+(\d+)/.exec(h.header);
+    let oldNo = Number(m[1]);
+    let newNo = Number(m[2]);
+    const width = String(Math.max(oldNo, newNo) + h.lines.length).length;
+    pre.style.setProperty('--no-width', `${width}ch`);
+    const number = (n) => {
       const span = document.createElement('span');
-      span.className = l.mark === '-' ? 'pl-del' : l.mark === '+' ? 'pl-add' : l.mark === '\\' ? 'pl-note' : 'pl-ctx';
-      span.textContent = `${l.mark}${l.text}\n`;
-      pre.appendChild(span);
+      span.className = 'pl-no';
+      span.textContent = n === null ? '' : String(n);
+      return span;
+    };
+    for (const l of h.lines) {
+      const row = document.createElement('div');
+      row.className = l.mark === '-' ? 'pl-del' : l.mark === '+' ? 'pl-add' : l.mark === '\\' ? 'pl-note' : 'pl-ctx';
+      const showOld = l.mark === ' ' || l.mark === '-';
+      const showNew = l.mark === ' ' || l.mark === '+';
+      row.append(number(showOld ? oldNo++ : null), number(showNew ? newNo++ : null));
+      const text = document.createElement('span');
+      text.className = 'pl-text';
+      text.textContent = `${l.mark}${l.text}`;
+      row.appendChild(text);
+      pre.appendChild(row);
     }
     popup.append(head, pre);
     const r = mark.getBoundingClientRect();
