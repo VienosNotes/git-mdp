@@ -3,8 +3,9 @@
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { loadAssets } from './assets.js';
 import { openBrowser } from './browser.js';
-import { buildFileDiff } from './diff.js';
+import { buildDocuments } from './changes.js';
 import { repoRoot, toRepoPath, collectFileDiffs, type Comparison } from './git.js';
 import { renderPage } from './render.js';
 
@@ -116,13 +117,7 @@ async function main(argv: string[]): Promise<number> {
     console.error('差分はありません');
     return 0;
   }
-  const documents = files.map((change) => {
-    const path = change.status === 'R' ? `${change.oldPath} → ${change.newPath}` : (change.newPath ?? change.oldPath)!;
-    const file = buildFileDiff(path, change.oldText, change.patch);
-    file.change = { status: change.status, oldPath: change.oldPath, newPath: change.newPath };
-    return file;
-  });
-  const html = renderPage(documents, css);
+  const html = renderPage(buildDocuments(files), loadAssets(), { customCss: css });
   if (opts.output === '-') {
     // head などで読み取り側が先に閉じても、エラーを表示せずに終わる
     process.stdout.on('error', (e: NodeJS.ErrnoException) => {

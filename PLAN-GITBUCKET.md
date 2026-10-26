@@ -60,7 +60,7 @@ CLI の `collectFileDiffs` が返す形式に合わせる。
 
 | フェーズ | 主な成果物 | 次へ進むためのゲート | 状態 |
 |---|---|---|---|
-| G0. 描画処理の共用準備（git-mdp） | ブラウザ用 JS とデータ形式の文書 | CLI の動作を変えずに、ブラウザで CLI と同じ HTML を生成できる | 未着手 |
+| G0. 描画処理の共用準備（git-mdp） | ブラウザ用 JS とデータ形式の文書 | CLI の動作を変えずに、ブラウザで CLI と同じ HTML を生成できる | **完了**（[記録](docs/web.md)） |
 | G1. プラグインの土台 | 読み込めるプラグインの jar とビルド手順 | 利用する GitBucket に導入でき、ブラウザ用 JS を配信できる | 未着手 |
 | G2. 差分データの取得 | PR の差分を返すコントローラ | PR の Markdown の変更を漏れなく、正しい内容で取得できる | 未着手 |
 | G3. 表示画面と導線 | Markdown Diff タブと表示画面 | PR 画面から開いて、CLI と同じ操作でレビューできる | 未着手 |
@@ -81,6 +81,16 @@ CLI の `collectFileDiffs` が返す形式に合わせる。
 - 既存のテストがすべて通り、CLI の出力が変わらない。
 - 同じ入力に対し、ブラウザ用 JS が生成する HTML と CLI が生成する HTML が一致する。
 - ブラウザ用 JS を読み込んだページで、生成した HTML を iframe（`sandbox="allow-scripts"`）に表示し、マーク・ポップアップ・目次・折りたたみなどが動く。
+
+### 結果：完了
+
+- `render.ts` からファイルの読み込みを外し、標準の CSS・JS を引数で受け取るようにした。CLI は `assets.ts` で読み込んで渡す。
+- 変更一覧から描画用の文書を作る処理を `changes.ts`（`buildDocuments`）に移し、CLI とブラウザ用の入口で共用する。
+- ブラウザ用の入口 `src/web.ts`（`MdDiff.renderMarkdownDiff`）と、`npm run build:web`（esbuild）を追加した。生成物は `dist/web/md-diff.js`（約 285KB、圧縮なし）。
+- データ形式と表示のしかたを [docs/web.md](docs/web.md) に記載した。
+- 全フィクスチャと複数ファイル（追加・削除・リネームを含む）で、ブラウザ用 JS と CLI の HTML が一致することをテストで確認した（計58テスト）。
+- `npm run sample` で生成する `out/web-demo.html`（sandbox 付きの iframe での表示例）を Chromium で開き、マーク・ポップアップ・前後の hunk への移動・目次・折りたたみ・表示モードの切り替えが動くこと、iframe 内から親ページと Cookie を参照できないこと（SecurityError、オリジンは `null`）を確認した。
+- sandbox 内では、ページ内リンク（`#file-1` など）が親ページの URL を基準に解決され、iframe ごと移動してしまう問題が見つかった。`assets/client.js` で `#` で始まるリンクを自前でスクロールするよう修正した（CLI の動作は変わらない）。
 
 ## フェーズ G1：プラグインの土台
 

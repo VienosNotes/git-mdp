@@ -2,6 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
+import type { FileChange } from './changes.js';
 
 export class GitError extends Error {}
 
@@ -54,13 +55,7 @@ export function toRepoPath(root: string, cwd: string, path: string): string {
 }
 
 // Git のパスは NUL 区切りで取得し、引用符や改行を含む名前もそのまま保持する
-export interface ChangedFile {
-  status: 'A' | 'D' | 'M' | 'R';
-  oldPath: string | null;
-  newPath: string | null;
-  oldText: string;
-  patch: string;
-}
+export type ChangedFile = FileChange;
 
 function resolveComparison(root: string, comparison: Comparison): { source: string; revisions: string[] } {
   const commit = (ref: string) => git(['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`], root).trim();
