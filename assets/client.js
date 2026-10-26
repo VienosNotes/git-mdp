@@ -70,6 +70,7 @@
       mark.textContent = String(it.i + 1);
       // title はブラウザのツールチップがポップアップと重なるため使わず、読み上げ用の名前だけ付ける
       mark.setAttribute('aria-label', hunks[it.i].header);
+      mark.anchorElement = it.anchor;
       mark.addEventListener('mouseenter', () => {
         it.anchor.classList.add('md-focus');
         if (pinned === null) show(fileIndex, it.i, mark);
@@ -169,10 +170,71 @@
     document.body.dataset.mode = m;
     unpin();
     layout();
+    updateNav();
   }
+
+  // ツールバーの下端。スクロール位置の判定と移動先の基準にする
+  const toolbar = document.querySelector('.toolbar');
+  const currentFile = document.getElementById('current-file');
+  const prevButton = document.getElementById('prev-hunk');
+  const nextButton = document.getElementById('next-hunk');
+  const MARGIN = 16;
+  const viewTop = () => toolbar.getBoundingClientRect().bottom + MARGIN;
+
+  // 表示位置にあるファイル名と、前後の hunk ボタンの状態を更新する
+  function updateNav() {
+    let current = null;
+    for (const file of document.querySelectorAll('.file')) {
+      if (file.getBoundingClientRect().top > viewTop()) break;
+      current = file;
+    }
+    if (current) {
+      const path = current.querySelector('.file-header h2').textContent;
+      const status = current.querySelector('.file-status').textContent;
+      currentFile.textContent = `${path}（${status}）`;
+      currentFile.title = path;
+    } else {
+      currentFile.textContent = '';
+    }
+    const marks = visibleMarks();
+    prevButton.disabled = !marks.some((m) => m.getBoundingClientRect().top < viewTop() - 2);
+    nextButton.disabled = !marks.some((m) => m.getBoundingClientRect().top > viewTop() + 2);
+  }
+
+  // 表示中の本文のマーク（文書順）
+  const visibleMarks = () => [...document.querySelectorAll('.doc:not([hidden]) .mark')];
+
+  // マークがツールバーのすぐ下に来るようにスクロールし、対応する本文を一時的に強調する
+  function jump(forward) {
+    const marks = visibleMarks();
+    const top = viewTop();
+    const target = forward
+      ? marks.find((m) => m.getBoundingClientRect().top > top + 2)
+      : marks.reverse().find((m) => m.getBoundingClientRect().top < top - 2);
+    if (!target) return;
+    window.scrollBy(0, target.getBoundingClientRect().top - top);
+    const anchor = target.anchorElement;
+    anchor.classList.add('md-focus');
+    setTimeout(() => anchor.classList.remove('md-focus'), 1200);
+  }
+
+  prevButton.addEventListener('click', () => jump(false));
+  nextButton.addEventListener('click', () => jump(true));
+  let navFrame = 0;
+  window.addEventListener('scroll', () => {
+    cancelAnimationFrame(navFrame);
+    navFrame = requestAnimationFrame(updateNav);
+  }, { passive: true });
 
   toggle.addEventListener('click', () => setMode(mode === 'merged' ? 'new' : 'merged'));
   splitToggle.addEventListener('change', () => setMode(mode));
-  new ResizeObserver(() => layout()).observe(document.querySelector('main'));
+  new ResizeObserver(() => {
+    layout();
+    updateNav();
+  }).observe(document.querySelector('main'));
+  // ファイル一覧から移動したとき、見出しがツールバーのすぐ下に来るようにする
+  new ResizeObserver(() => {
+    document.documentElement.style.setProperty('--toolbar-height', `${toolbar.offsetHeight}px`);
+  }).observe(toolbar);
   setMode('merged');
 })();

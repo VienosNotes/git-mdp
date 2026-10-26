@@ -286,6 +286,8 @@ ${customCss}
 <body>
 <header class="toolbar">
 <span>${files.length} ファイル / ${hunkCount} hunks</span>
+<span id="current-file" aria-live="polite"></span>
+<span class="hunk-nav"><button type="button" id="prev-hunk">◀ 前の hunk</button><button type="button" id="next-hunk">次の hunk ▶</button></span>
 <label><input type="checkbox" id="split-toggle" checked> 変更行を独立して表示</label>
 <button type="button" id="mode-toggle"></button>
 </header>
