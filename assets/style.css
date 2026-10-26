@@ -19,7 +19,7 @@ body {
   margin: 0;
   color: var(--fg);
   background: var(--bg);
-  font-family: -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  font-family: -apple-system, "Segoe UI", "BIZ UDGothic", "Hiragino Sans", "Noto Sans JP", sans-serif;
   line-height: 1.7;
 }
 
