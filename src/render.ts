@@ -226,7 +226,8 @@ export function renderBody(file: FileDiff, mode: Mode, split: boolean): string {
 
 const assetUrl = (name: string) => new URL(`../../assets/${name}`, import.meta.url);
 
-export function renderPage(input: FileDiff | FileDiff[]): string {
+// customCss は標準 CSS の後ろに埋め込み、色やフォントを上書きできるようにする
+export function renderPage(input: FileDiff | FileDiff[], customCss?: string): string {
   const files = Array.isArray(input) ? input : [input];
   const esc = md.utils.escapeHtml;
   const labels = { A: '追加', D: '削除', M: '変更', R: 'リネーム' };
@@ -277,7 +278,10 @@ ${stateOnly ? '' : section(file, 'merged', true) + section(file, 'merged', false
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)} - md-diff</title>
 <style>
-${css}</style>
+${css}</style>${customCss === undefined ? '' : `
+<style>
+${customCss}
+</style>`}
 </head>
 <body>
 <header class="toolbar">

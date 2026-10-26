@@ -13,7 +13,16 @@ const tmp = mkdtempSync(join(tmpdir(), 'md-diff-test-'));
 const cleanConfig = join(tmp, 'clean.gitconfig');
 writeFileSync(cleanConfig, '[user]\n\tname = test\n\temail = test@example.com\n');
 
-const envWith = (config: string) => ({ ...process.env, GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: '1' });
+// 実際のブラウザを起動しないよう、起動コマンドを渡されたパスを記録するだけのスクリプトに置き換える
+const browserLog = join(tmp, 'browser.log');
+const fakeBrowser = join(tmp, 'fake-browser.sh');
+writeFileSync(fakeBrowser, `#!/bin/sh\necho "$1" >> '${browserLog}'\n`, { mode: 0o755 });
+const envWith = (config: string) => ({
+  ...process.env,
+  GIT_CONFIG_GLOBAL: config,
+  GIT_CONFIG_NOSYSTEM: '1',
+  GIT_MD_DIFF_BROWSER: fakeBrowser,
+});
 const env = envWith(cleanConfig);
 
 function sh(cwd: string, ...args: string[]): string {
@@ -143,7 +152,6 @@ test('誤った入力やエラーを非 0 で通知する', () => {
   write(dir, 'new.md', 'c\n');
   const out = join(tmp, 'err.html');
   const cases: [string, string[], number, RegExp][] = [
-    ['出力先なし', ['--', 'doc.md'], 2, /--output/],
     ['未対応の引数', ['--output', out, '--unknown', '--', 'doc.md'], 2, /未対応/],
     ['リポジトリ外', ['--output', out, '--', '../x.md'], 1, /リポジトリ外/],
     ['保存失敗', ['--output', join(tmp, 'no-such-dir', 'a.html'), '--', 'doc.md'], 1, /保存できません/],
@@ -441,4 +449,135 @@ test('CLI は空ファイルの追加・削除と本文変更なしのリネー�
     assert.ok(html.includes(emptyStatus === 'add' ? '追加' : '削除'));
     assert.match(html, /リネーム/);
   }
+});
+
+// ブラウザの起動記録を読み、記録を消す
+function takeBrowserLog(): string[] {
+  if (!existsSync(browserLog)) return [];
+  const opened = readFileSync(browserLog, 'utf8').split('\n').filter((l) => l !== '');
+  rmSync(browserLog);
+  return opened;
+}
+
+function changedRepo(): string {
+  const dir = newRepo({ 'doc.md': '# 見出し\n\n本文\n' });
+  write(dir, 'doc.md', '# 見出し\n\n本文を変更\n');
+  return dir;
+}
+
+test('出力先を省略すると一時ファイルに保存してブラウザで開く', () => {
+  const dir = changedRepo();
+  takeBrowserLog();
+  const r = run(dir, []);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, '');
+  const [opened] = takeBrowserLog();
+  assert.ok(opened.startsWith(tmpdir()), opened);
+  assert.match(readFileSync(opened, 'utf8'), /^<!doctype html>/);
+  assert.match(r.stderr, /保存しました/);
+});
+
+test('--no-open では一時ファイルの絶対パスを標準出力に返し、ブラウザを起動しない', () => {
+  const dir = changedRepo();
+  takeBrowserLog();
+  const r = run(dir, ['--no-open']);
+  assert.equal(r.status, 0, r.stderr);
+  const path = r.stdout.trim();
+  assert.equal(r.stdout, `${path}\n`);
+  assert.equal(resolve(path), path);
+  assert.ok(existsSync(path));
+  assert.deepEqual(takeBrowserLog(), []);
+});
+
+test('--output のファイルは --open を指定したときだけブラウザで開く', () => {
+  const dir = changedRepo();
+  takeBrowserLog();
+  const out = join(tmp, 'saved.html');
+  let r = run(dir, ['--output', out]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, '');
+  assert.deepEqual(takeBrowserLog(), []);
+  r = run(dir, ['--output', out, '--open']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(takeBrowserLog(), [out]);
+});
+
+test('--output - では標準出力に HTML だけを出す', () => {
+  const dir = changedRepo();
+  takeBrowserLog();
+  const r = run(dir, ['--output', '-']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^<!doctype html>/);
+  assert.match(r.stdout, /<\/html>\n$/);
+  assert.doesNotMatch(r.stderr, /<html/);
+  assert.deepEqual(takeBrowserLog(), []);
+});
+
+test('--css の内容を標準 CSS の後ろに埋め込む', () => {
+  const dir = changedRepo();
+  const css = join(tmp, 'custom.css');
+  writeFileSync(css, '.md-add { background: #ccf; }\n');
+  const out = join(tmp, 'css.html');
+  for (const args of [['--output', out], ['--output', '-'], ['--no-open']]) {
+    const r = run(dir, [...args, '--css', css]);
+    assert.equal(r.status, 0, r.stderr);
+    const html = args[1] === '-' ? r.stdout : readFileSync(args[0] === '--no-open' ? r.stdout.trim() : out, 'utf8');
+    const styles = [...html.matchAll(/<style>\n([\s\S]*?)<\/style>/g)].map((m) => m[1]);
+    assert.equal(styles.length, 2);
+    assert.match(styles[0], /--add-bg/);
+    assert.equal(styles[1], '.md-add { background: #ccf; }\n\n');
+  }
+  // 元の CSS ファイルを移動しても、生成済みの HTML にスタイルが残る
+  renameSync(css, join(tmp, 'moved.css'));
+  assert.match(readFileSync(out, 'utf8'), /#ccf/);
+});
+
+test('ブラウザを起動できなければ非 0 で終わり、生成した HTML のパスを通知する', () => {
+  const dir = changedRepo();
+  const failing = join(tmp, 'failing-browser.sh');
+  writeFileSync(failing, '#!/bin/sh\nexit 3\n', { mode: 0o755 });
+  for (const browser of [failing, join(tmp, 'no-such-browser')]) {
+    const r = run(dir, [], { ...env, GIT_MD_DIFF_BROWSER: browser });
+    assert.equal(r.status, 1, browser);
+    const path = /(\/\S+\.html) を手動で開いてください/.exec(r.stderr)?.[1];
+    assert.ok(path && existsSync(path), r.stderr);
+  }
+});
+
+test('差分がなければ一時ファイルもブラウザ起動もしない', () => {
+  const dir = newRepo({ 'doc.md': 'a\n' });
+  takeBrowserLog();
+  const r = run(dir, []);
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+  assert.match(r.stderr, /差分はありません/);
+  assert.deepEqual(takeBrowserLog(), []);
+});
+
+test('出力とブラウザ起動に関する引数の誤りを通知する', () => {
+  const dir = changedRepo();
+  const css = join(tmp, 'bad.css');
+  writeFileSync(css, 'a { color: red; }</STYLE><script>x</script>\n');
+  const cases: [string, string[], number, RegExp][] = [
+    ['--open と --no-open', ['--open', '--no-open'], 2, /併用/],
+    ['--output - と --open', ['--output', '-', '--open'], 2, /併用/],
+    ['--output の重複', ['--output', 'a.html', '--output', 'b.html'], 2, /一度だけ/],
+    ['--output の値なし', ['--output'], 2, /値を指定/],
+    ['--output= の値が空', ['--output='], 2, /値を指定/],
+    ['--css の値なし', ['--css'], 2, /値を指定/],
+    ['CSS を読めない', ['--css', join(tmp, 'no-such.css')], 1, /CSS ファイルを読み込めません/],
+    ['CSS に </style', ['--css', css], 1, /<\/style/],
+  ];
+  for (const [name, args, status, message] of cases) {
+    const r = run(dir, args);
+    assert.equal(r.status, status, name);
+    assert.match(r.stderr, message, name);
+    assert.equal(r.stdout, '', name);
+  }
+});
+
+test('--help で使い方を表示する', () => {
+  const r = run(tmp, ['--help']);
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /^使い方: git md-diff/);
 });
