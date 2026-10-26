@@ -12,15 +12,22 @@
 
   const docOf = (file) => file.querySelector(`.doc[data-mode="${mode}"][data-split="${splitToggle.checked}"]`);
 
+  // マークを置く候補の要素と、その行範囲
+  function candidates(doc) {
+    return [...doc.querySelectorAll('.markdown-body [data-ls], .markdown-body [data-l]')].map((el) => {
+      const ls = Number(el.dataset.ls ?? el.dataset.l);
+      const le = el.dataset.le !== undefined ? Number(el.dataset.le) : ls + 1;
+      return { el, ls, le };
+    });
+  }
+
   // 指定行を含む最も内側の要素。なければ直後の要素、それもなければ文末
-  function anchorFor(doc, line) {
+  function anchorFor(doc, elements, line) {
     let best = null;
     let bestLs = -1;
     let next = null;
     let nextLs = Infinity;
-    for (const el of doc.querySelectorAll('.markdown-body [data-ls], .markdown-body [data-l]')) {
-      const ls = Number(el.dataset.ls ?? el.dataset.l);
-      const le = el.dataset.le !== undefined ? Number(el.dataset.le) : ls + 1;
+    for (const { el, ls, le } of elements) {
       if (ls <= line && line < le && ls >= bestLs) {
         best = el;
         bestLs = ls;
@@ -44,8 +51,9 @@
     const gutter = doc.querySelector('.gutter');
     gutter.textContent = '';
     const base = doc.getBoundingClientRect().top;
+    const elements = candidates(doc);
     const items = hunks.map((h, i) => {
-      const anchor = anchorFor(doc, h.target[mode]);
+      const anchor = anchorFor(doc, elements, h.target[mode]);
       return { i, anchor, y: anchor.getBoundingClientRect().top - base };
     });
     // 位置が重なるマークは下にずらし、すべての hunk に到達できるようにする
