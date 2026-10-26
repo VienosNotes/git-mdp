@@ -100,7 +100,10 @@ main { max-width: 960px; margin: 0 auto; padding: 16px; }
 .popup-close { border: none; background: none; cursor: pointer; font-size: 14px; visibility: hidden; }
 #popup.pinned .popup-close { visibility: visible; }
 #popup pre { margin: 0; padding: 4px 0; font-family: ui-monospace, Consolas, monospace; line-height: 1.45; }
-#popup pre span { display: block; padding: 0 8px; white-space: pre-wrap; }
+#popup pre > div { display: flex; padding: 0 8px; }
+/* 行番号は選択・コピーの対象にしない */
+.pl-no { flex: none; width: var(--no-width); margin-right: 1ch; text-align: right; color: var(--muted); user-select: none; -webkit-user-select: none; }
+.pl-text { flex: 1; min-width: 0; padding-left: 0.5ch; white-space: pre-wrap; }
 .pl-del { background: var(--del-bg); }
 .pl-add { background: var(--add-bg); }
 .pl-note { color: var(--muted); font-style: italic; }
