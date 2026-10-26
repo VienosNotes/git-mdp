@@ -1,6 +1,6 @@
 # ブラウザ用 JS（GitBucket プラグインとの共用）
 
-CLI と同じ HTML をブラウザで生成するための JS。GitBucket プラグインは、このファイルを配信し、PR の差分データから表示を生成する。計画は [PLAN-GITBUCKET.md](../PLAN-GITBUCKET.md) を参照。
+CLI と同じ HTML をブラウザで生成するための JS。GitBucket プラグインは、このファイルを配信し、PR の差分データから表示を生成する。プラグインと計画（PLAN-GITBUCKET.md）は [gitbucket-mdp-plugin](https://github.com/VienosNotes/gitbucket-mdp-plugin) にある。
 
 ## ビルド
 
@@ -71,4 +71,4 @@ CLI が出力するものと同じ HTML（一つの完結した文書）を文�
 ### sandbox 内での注意
 
 - `srcdoc` の文書では、`#file-1` のようなページ内リンクが親ページの URL を基準に解決され、iframe ごと移動してしまう。そのため `assets/client.js` は、`#` で始まるリンクのクリックを受け取り、自前で該当要素までスクロールする。
-- 本文中の外部リンクを押すと、iframe 自体がそのページへ移動する。新しいタブで開くかどうかは、PLAN-GITBUCKET.md のフェーズ G3 で決める。
+- 本文中の外部リンクを押すと、iframe 自体がそのページへ移動する。GitBucket プラグインでは、iframe の `sandbox` に `allow-popups allow-popups-to-escape-sandbox` を加え、生成した HTML に `<base target="_blank">` を入れて、新しいタブで開くようにしている。

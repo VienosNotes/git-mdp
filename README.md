@@ -153,4 +153,4 @@ npm run sample     # fixtures/ から out/*.html を生成する
 npm run build:web  # GitBucket プラグイン用のブラウザ用 JS（dist/web/md-diff.js）を生成する
 ```
 
-各フェーズの実装記録は [docs/](docs/) に、計画は [PLAN-CLI.md](PLAN-CLI.md) と [PLAN-GITBUCKET.md](PLAN-GITBUCKET.md) に、要件は [REQUIREMENTS.md](REQUIREMENTS.md) にある。ブラウザ用 JS のデータ形式は [docs/web.md](docs/web.md) を参照。
+各フェーズの実装記録は [docs/](docs/) に、計画は [PLAN-CLI.md](PLAN-CLI.md) に、要件は [REQUIREMENTS.md](REQUIREMENTS.md) にある。ブラウザ用 JS のデータ形式は [docs/web.md](docs/web.md) を参照。GitBucket プラグインは [gitbucket-mdp-plugin](https://github.com/VienosNotes/gitbucket-mdp-plugin) にある（計画もそちらの PLAN-GITBUCKET.md）。
