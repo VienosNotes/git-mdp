@@ -47,7 +47,7 @@
     const fileIndex = Number(file.dataset.file);
     const hunks = data.files[fileIndex].hunks;
     const doc = docOf(file);
-    if (!doc) return;
+    if (!doc || file.classList.contains('collapsed')) return;
     const gutter = doc.querySelector('.gutter');
     gutter.textContent = '';
     const base = doc.getBoundingClientRect().top;
@@ -70,6 +70,7 @@
       mark.textContent = String(it.i + 1);
       // title はブラウザのツールチップがポップアップと重なるため使わず、読み上げ用の名前だけ付ける
       mark.setAttribute('aria-label', hunks[it.i].header);
+      mark.anchorElement = it.anchor;
       mark.addEventListener('mouseenter', () => {
         it.anchor.classList.add('md-focus');
         if (pinned === null) show(fileIndex, it.i, mark);
@@ -169,10 +170,100 @@
     document.body.dataset.mode = m;
     unpin();
     layout();
+    updateNav();
   }
+
+  // ツールバーの下端。スクロール位置の判定と移動先の基準にする
+  const toolbar = document.querySelector('.toolbar');
+  const currentFile = document.getElementById('current-file');
+  const fileList = document.querySelector('.file-list');
+  const prevButton = document.getElementById('prev-hunk');
+  const nextButton = document.getElementById('next-hunk');
+  const MARGIN = 16;
+  const viewTop = () => toolbar.getBoundingClientRect().bottom + MARGIN;
+
+  // 表示位置にあるファイル名と、前後の hunk ボタンの状態を更新する
+  function updateNav() {
+    let current = null;
+    for (const file of document.querySelectorAll('.file')) {
+      if (file.getBoundingClientRect().top > viewTop()) break;
+      current = file;
+    }
+    for (const item of fileList.querySelectorAll('li')) {
+      const isCurrent = current !== null && item.dataset.file === current.dataset.file;
+      item.classList.toggle('current', isCurrent);
+      // 目次がスクロールする場合も、表示中のファイルが目次の表示範囲に入るようにする
+      if (isCurrent) {
+        const list = fileList.getBoundingClientRect();
+        const r = item.getBoundingClientRect();
+        if (r.top < list.top) fileList.scrollTop -= list.top - r.top;
+        else if (r.bottom > list.bottom) fileList.scrollTop += r.bottom - list.bottom;
+      }
+    }
+    if (current) {
+      const path = current.querySelector('.file-header h2').textContent;
+      const status = current.querySelector('.file-status').textContent;
+      currentFile.textContent = `${path}（${status}）`;
+      currentFile.title = path;
+    } else {
+      currentFile.textContent = '';
+    }
+    const marks = visibleMarks();
+    prevButton.disabled = !marks.some((m) => m.getBoundingClientRect().top < viewTop() - 2);
+    nextButton.disabled = !marks.some((m) => m.getBoundingClientRect().top > viewTop() + 2);
+  }
+
+  // 表示中の本文のマーク（文書順）。折りたたんだファイルは含めない
+  const visibleMarks = () => [...document.querySelectorAll('.file:not(.collapsed) .doc:not([hidden]) .mark')];
+
+  // マークがツールバーのすぐ下に来るようにスクロールし、対応する本文を一時的に強調する
+  function jump(forward) {
+    const marks = visibleMarks();
+    const top = viewTop();
+    const target = forward
+      ? marks.find((m) => m.getBoundingClientRect().top > top + 2)
+      : marks.reverse().find((m) => m.getBoundingClientRect().top < top - 2);
+    if (!target) return;
+    window.scrollBy(0, target.getBoundingClientRect().top - top);
+    const anchor = target.anchorElement;
+    anchor.classList.add('md-focus');
+    setTimeout(() => anchor.classList.remove('md-focus'), 1200);
+  }
+
+  // ファイルの折りたたみ。見出しが画面より上に行った場合は、見出しが見える位置に戻す
+  for (const button of document.querySelectorAll('.collapse-toggle')) {
+    button.addEventListener('click', () => {
+      const file = button.closest('.file');
+      const collapsed = file.classList.toggle('collapsed');
+      button.textContent = collapsed ? '▶' : '▼';
+      button.setAttribute('aria-expanded', String(!collapsed));
+      button.setAttribute('aria-label', collapsed ? '展開する' : '折りたたむ');
+      fileList.querySelector(`li[data-file="${file.dataset.file}"]`).classList.toggle('collapsed', collapsed);
+      if (pinned !== null && pinned.startsWith(`${file.dataset.file}:`)) unpin();
+      layout();
+      const top = file.getBoundingClientRect().top - toolbar.getBoundingClientRect().bottom - 8;
+      if (top < 0) window.scrollBy(0, top);
+      updateNav();
+    });
+  }
+
+  prevButton.addEventListener('click', () => jump(false));
+  nextButton.addEventListener('click', () => jump(true));
+  let navFrame = 0;
+  window.addEventListener('scroll', () => {
+    cancelAnimationFrame(navFrame);
+    navFrame = requestAnimationFrame(updateNav);
+  }, { passive: true });
 
   toggle.addEventListener('click', () => setMode(mode === 'merged' ? 'new' : 'merged'));
   splitToggle.addEventListener('change', () => setMode(mode));
-  new ResizeObserver(() => layout()).observe(document.querySelector('main'));
+  new ResizeObserver(() => {
+    layout();
+    updateNav();
+  }).observe(document.querySelector('main'));
+  // ファイル一覧から移動したとき、見出しがツールバーのすぐ下に来るようにする
+  new ResizeObserver(() => {
+    document.documentElement.style.setProperty('--toolbar-height', `${toolbar.offsetHeight}px`);
+  }).observe(toolbar);
   setMode('merged');
 })();
