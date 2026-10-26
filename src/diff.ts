@@ -25,6 +25,11 @@ export interface Hunk {
 
 export interface FileDiff {
   path: string;
+  change?: {
+    status: 'A' | 'D' | 'M' | 'R';
+    oldPath: string | null;
+    newPath: string | null;
+  };
   hunks: Hunk[];
   lines: DocLine[];
 }

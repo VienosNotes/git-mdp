@@ -21,7 +21,7 @@ for (const { name } of fixtures) {
     const file = buildFileDiff(name, read(name, 'before.md'), read(name, 'diff.patch'));
     const html = renderPage(file);
     const json = /<script type="application\/json" id="md-diff-data">(.*?)<\/script>/s.exec(html)![1];
-    const data = JSON.parse(json);
+    const data = JSON.parse(json).files[0];
     assert.equal(data.hunks.length, file.hunks.length);
     for (const h of data.hunks) {
       assert.ok(h.target.merged >= 0 && h.target.new >= 0);
@@ -67,4 +67,30 @@ test('リスト内の段落は分割しない', () => {
   const patch = '@@ -1,2 +1,2 @@\n - a\n-  b\n+  c\n';
   const html = renderBody(buildFileDiff('x.md', before, patch), 'merged', true);
   assert.equal(html.match(/<p/g), null);
+});
+
+
+test('複数文書の hunk はファイルごとに分離し、一覧と本文の移動先が一致する', () => {
+  const first = buildFileDiff('a.md', '旧 A\n', '@@ -1 +1 @@\n-旧 A\n+新 A\n');
+  const second = buildFileDiff('b.md', '旧 B\n', '@@ -1 +1 @@\n-旧 B\n+新 B\n');
+  const html = renderPage([first, second]);
+  const json = /<script type="application\/json" id="md-diff-data">(.*?)<\/script>/s.exec(html)![1];
+  const files = JSON.parse(json).files;
+  assert.equal(files.length, 2);
+  for (const [i, file] of files.entries()) {
+    assert.equal(file.path, i === 0 ? 'a.md' : 'b.md');
+    assert.equal(file.hunks.length, 1);
+    assert.equal(file.hunks[0].lines[1].text, i === 0 ? '新 A' : '新 B');
+    assert.ok(html.includes(`href="#file-${i}"`));
+    assert.ok(html.includes(`id="file-${i}" data-file="${i}"`));
+  }
+});
+
+test('ファイル名を HTML と JSON に安全に埋め込む', () => {
+  const file = buildFileDiff('</script><img src=x onerror=alert(1)>.md', '', '@@ -0,0 +1 @@\n+本文\n');
+  const html = renderPage([file]);
+  assert.doesNotMatch(html, /<img src=x/);
+  assert.equal(html.match(/<\/script>/g)!.length, 2);
+  const json = /<script type="application\/json" id="md-diff-data">(.*?)<\/script>/s.exec(html)![1];
+  assert.equal(JSON.parse(json).files[0].path, file.path);
 });

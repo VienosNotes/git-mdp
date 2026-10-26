@@ -7,10 +7,10 @@
   const MODE_LABEL = { merged: '統合表示', new: '更新後のみ' };
   const MARK_HEIGHT = 18;
   let mode = 'merged';
-  let pinned = null; // 固定中の hunk 番号
+  let pinned = null; // 固定中のファイル番号と hunk 番号
   let hideTimer = 0;
 
-  const docOf = (m) => document.querySelector(`.doc[data-mode="${m}"][data-split="${splitToggle.checked}"]`);
+  const docOf = (file) => file.querySelector(`.doc[data-mode="${mode}"][data-split="${splitToggle.checked}"]`);
 
   // 指定行を含む最も内側の要素。なければ直後の要素、それもなければ文末
   function anchorFor(doc, line) {
@@ -33,12 +33,18 @@
   }
 
   function layout() {
-    const doc = docOf(mode);
+    for (const file of document.querySelectorAll('.file')) layoutFile(file);
+  }
+
+  function layoutFile(file) {
+    const fileIndex = Number(file.dataset.file);
+    const hunks = data.files[fileIndex].hunks;
+    const doc = docOf(file);
     if (!doc) return;
     const gutter = doc.querySelector('.gutter');
     gutter.textContent = '';
     const base = doc.getBoundingClientRect().top;
-    const items = data.hunks.map((h, i) => {
+    const items = hunks.map((h, i) => {
       const anchor = anchorFor(doc, h.target[mode]);
       return { i, anchor, y: anchor.getBoundingClientRect().top - base };
     });
@@ -48,40 +54,44 @@
     for (const it of items) {
       const y = Math.max(it.y, prev + MARK_HEIGHT);
       prev = y;
+      const key = `${fileIndex}:${it.i}`;
       const mark = document.createElement('button');
       mark.type = 'button';
-      mark.className = `mark mark-${data.hunks[it.i].kind}`;
+      mark.className = `mark mark-${hunks[it.i].kind}`;
       mark.style.top = `${y}px`;
       mark.textContent = String(it.i + 1);
-      mark.title = data.hunks[it.i].header;
+      mark.title = hunks[it.i].header;
       mark.addEventListener('mouseenter', () => {
         it.anchor.classList.add('md-focus');
-        if (pinned === null) show(it.i, mark);
+        if (pinned === null) show(fileIndex, it.i, mark);
       });
       mark.addEventListener('mouseleave', () => {
         it.anchor.classList.remove('md-focus');
         if (pinned === null) scheduleHide();
       });
       mark.addEventListener('click', () => {
-        if (pinned === it.i) {
+        if (pinned === key) {
           unpin();
         } else {
-          pinned = it.i;
-          show(it.i, mark);
+          pinned = key;
+          show(fileIndex, it.i, mark);
           popup.classList.add('pinned');
         }
       });
       gutter.appendChild(mark);
     }
+    // 同じ位置のマークが多くても、次のファイルに重ならない高さを確保する
+    doc.style.minHeight = `${Math.max(64, Number.isFinite(prev) ? prev + MARK_HEIGHT : 0)}px`;
   }
 
-  function show(i, mark) {
+  function show(fileIndex, i, mark) {
     clearTimeout(hideTimer);
-    const h = data.hunks[i];
+    const file = data.files[fileIndex];
+    const h = file.hunks[i];
     popup.textContent = '';
     const head = document.createElement('div');
     head.className = 'popup-head';
-    head.textContent = `#${i + 1} ${h.header}`;
+    head.textContent = `${file.path} — #${i + 1} ${h.header}`;
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'popup-close';
@@ -125,8 +135,9 @@
 
   function setMode(m) {
     mode = m;
-    const current = docOf(m);
-    for (const doc of document.querySelectorAll('.doc')) doc.hidden = doc !== current;
+    for (const doc of document.querySelectorAll('.doc')) {
+      doc.hidden = doc.dataset.mode !== mode || doc.dataset.split !== String(splitToggle.checked);
+    }
     toggle.textContent = `表示: ${MODE_LABEL[m]}（切り替え）`;
     document.body.dataset.mode = m;
     unpin();
