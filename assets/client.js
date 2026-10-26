@@ -247,6 +247,15 @@
     });
   }
 
+  // ページ内リンクは自前でスクロールする。iframe の srcdoc に表示した場合、
+  // "#..." が親ページの URL を基準に解決され、iframe ごと移動してしまうため
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest('a[href^="#"]');
+    if (!link) return;
+    e.preventDefault();
+    document.getElementById(decodeURIComponent(link.getAttribute('href').slice(1)))?.scrollIntoView();
+  });
+
   prevButton.addEventListener('click', () => jump(false));
   nextButton.addEventListener('click', () => jump(true));
   let navFrame = 0;

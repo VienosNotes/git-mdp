@@ -1,7 +1,9 @@
 // フィクスチャから検証用の HTML を out/ に生成する
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { FileChange } from './changes.js';
 import { buildFileDiff, type FileDiff } from './diff.js';
+import { loadAssets } from './assets.js';
 import { renderPage } from './render.js';
 
 const fixtures = 'fixtures';
@@ -17,11 +19,46 @@ for (const name of readdirSync(fixtures, { withFileTypes: true })) {
   if (name.name === 'whole-del') file.change = { status: 'D', oldPath: file.path, newPath: null };
   files.push(file);
   const out = join('out', `${name.name}.html`);
-  writeFileSync(out, renderPage(file));
+  writeFileSync(out, renderPage(file, loadAssets()));
   console.error(`${out} (${file.hunks.length} hunks)`);
 }
 const renamed = buildFileDiff('old.md → renamed.md', '# 変更のない本文\n', '');
 renamed.change = { status: 'R', oldPath: 'old.md', newPath: 'renamed.md' };
 files.push(renamed);
-writeFileSync('out/multi.html', renderPage(files));
+writeFileSync('out/multi.html', renderPage(files, loadAssets()));
 console.error(`out/multi.html (${files.length} ファイル)`);
+
+// ブラウザ用 JS を sandbox 付きの iframe で表示するデモ（GitBucket プラグインの表示画面の参考）
+const changes: FileChange[] = readdirSync(fixtures, { withFileTypes: true }).filter((d) => d.isDirectory()).map(({ name }) => ({
+  status: name === 'whole-add' ? 'A' : name === 'whole-del' ? 'D' : 'M',
+  oldPath: name === 'whole-add' ? null : `${name}.md`,
+  newPath: name === 'whole-del' ? null : `${name}.md`,
+  oldText: readFileSync(join(fixtures, name, 'before.md'), 'utf8'),
+  patch: readFileSync(join(fixtures, name, 'diff.patch'), 'utf8'),
+}));
+const input = JSON.stringify({ title: 'デモ', files: changes }).replace(/</g, '\\u003c');
+writeFileSync('out/web-demo.html', `<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>md-diff ブラウザ用 JS のデモ</title>
+<style>
+html, body { margin: 0; height: 100%; }
+body { display: flex; flex-direction: column; }
+header { padding: 8px 16px; border-bottom: 1px solid #d1d9e0; font-family: sans-serif; }
+iframe { flex: 1; width: 100%; border: 0; }
+</style>
+</head>
+<body>
+<header>sandbox 付きの iframe での表示例</header>
+<iframe id="md-diff" sandbox="allow-scripts" title="Markdown Diff"></iframe>
+<script type="application/json" id="md-diff-input">${input}</script>
+<script src="../dist/web/md-diff.js"></script>
+<script>
+const data = JSON.parse(document.getElementById('md-diff-input').textContent);
+document.getElementById('md-diff').srcdoc = MdDiff.renderMarkdownDiff(data);
+</script>
+</body>
+</html>
+`);
+console.error('out/web-demo.html');

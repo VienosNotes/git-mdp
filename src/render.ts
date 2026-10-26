@@ -1,5 +1,4 @@
 // 差分情報から、統合表示と更新後のみの表示を含む単体 HTML を生成する
-import { readFileSync } from 'node:fs';
 import MarkdownIt from 'markdown-it';
 import type Token from 'markdown-it/lib/token.mjs';
 import type { DocLine, FileDiff, LineKind } from './diff.js';
@@ -224,10 +223,21 @@ export function renderBody(file: FileDiff, mode: Mode, split: boolean): string {
   return md.render(source, env);
 }
 
-const assetUrl = (name: string) => new URL(`../../assets/${name}`, import.meta.url);
+// 標準の CSS と JS。Node では assets.ts で読み込み、ブラウザ用 JS ではビルド時に埋め込む
+export interface Assets {
+  css: string;
+  js: string;
+}
 
-// customCss は標準 CSS の後ろに埋め込み、色やフォントを上書きできるようにする
-export function renderPage(input: FileDiff | FileDiff[], customCss?: string): string {
+export interface PageOptions {
+  // 標準 CSS の後ろに埋め込み、色やフォントを上書きできるようにする
+  customCss?: string;
+  title?: string;
+}
+
+// Node とブラウザのどちらでも動くよう、ファイルの読み込みなどは行わない
+export function renderPage(input: FileDiff | FileDiff[], assets: Assets, options: PageOptions = {}): string {
+  const { customCss } = options;
   const files = Array.isArray(input) ? input : [input];
   const esc = md.utils.escapeHtml;
   const labels = { A: '追加', D: '削除', M: '変更', R: 'リネーム' };
@@ -249,8 +259,7 @@ export function renderPage(input: FileDiff | FileDiff[], customCss?: string): st
   };
   // JSON 内の "<" をエスケープし、"</script>" や "<!--" で HTML の構造が壊れないようにする
   const json = JSON.stringify(data).replace(/</g, '\\u003c');
-  const css = readFileSync(assetUrl('style.css'), 'utf8');
-  const js = readFileSync(assetUrl('client.js'), 'utf8');
+  const { css, js } = assets;
   // 既定は統合表示で、変更行を独立して表示する
   const section = (file: FileDiff, mode: Mode, split: boolean) =>
     `<section class="doc" data-mode="${mode}" data-split="${split}"${mode === 'merged' && split ? '' : ' hidden'}>
@@ -275,7 +284,7 @@ ${stateOnly ? '' : section(file, 'merged', true) + section(file, 'merged', false
     ? '<button type="button" class="collapse-toggle" aria-expanded="false" aria-label="展開する">▶</button>'
     : '<button type="button" class="collapse-toggle" aria-expanded="true" aria-label="折りたたむ">▼</button>';
   const hunkCount = files.reduce((sum, file) => sum + file.hunks.length, 0);
-  const title = files.length === 1 ? files[0].path : `${files.length} ファイル`;
+  const title = options.title ?? (files.length === 1 ? files[0].path : `${files.length} ファイル`);
   return `<!doctype html>
 <html lang="ja">
 <head>

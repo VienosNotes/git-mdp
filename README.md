@@ -148,8 +148,9 @@ git md-diff --css custom.css
 
 ```sh
 npm ci
-npm test         # ビルドして全テストを実行
-npm run sample   # fixtures/ から out/*.html を生成する
+npm test           # ビルドして全テストを実行
+npm run sample     # fixtures/ から out/*.html を生成する
+npm run build:web  # GitBucket プラグイン用のブラウザ用 JS（dist/web/md-diff.js）を生成する
 ```
 
-各フェーズの実装記録は [docs/](docs/) に、計画は [PLAN-CLI.md](PLAN-CLI.md) に、要件は [REQUIREMENTS.md](REQUIREMENTS.md) にある。
+各フェーズの実装記録は [docs/](docs/) に、計画は [PLAN-CLI.md](PLAN-CLI.md) と [PLAN-GITBUCKET.md](PLAN-GITBUCKET.md) に、要件は [REQUIREMENTS.md](REQUIREMENTS.md) にある。ブラウザ用 JS のデータ形式は [docs/web.md](docs/web.md) を参照。

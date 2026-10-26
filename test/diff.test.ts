@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildFileDiff, newText, splitLines } from '../src/diff.js';
-import { renderBody, renderPage } from '../src/render.js';
+import { loadAssets } from '../src/assets.js';
+import { renderBody, renderPage as render } from '../src/render.js';
+
+const renderPage = (input: Parameters<typeof render>[0]) => render(input, loadAssets());
 
 const fixtures = readdirSync('fixtures', { withFileTypes: true }).filter((d) => d.isDirectory());
 const read = (name: string, file: string) => readFileSync(join('fixtures', name, file), 'utf8');
