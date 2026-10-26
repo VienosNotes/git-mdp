@@ -60,7 +60,8 @@
       mark.className = `mark mark-${hunks[it.i].kind}`;
       mark.style.top = `${y}px`;
       mark.textContent = String(it.i + 1);
-      mark.title = hunks[it.i].header;
+      // title はブラウザのツールチップがポップアップと重なるため使わず、読み上げ用の名前だけ付ける
+      mark.setAttribute('aria-label', hunks[it.i].header);
       mark.addEventListener('mouseenter', () => {
         it.anchor.classList.add('md-focus');
         if (pinned === null) show(fileIndex, it.i, mark);
