@@ -5,8 +5,9 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { collectFileDiffs, toRepoPath, type Comparison } from '../src/git.js';
+import { collectFileDiffs, toRepoPath, type Comparison, type Target } from '../src/git.js';
 import { buildFileDiff, newText } from '../src/diff.js';
+import { buildDocuments } from '../src/changes.js';
 
 const cli = resolve('dist/src/cli.js');
 const tmp = mkdtempSync(join(tmpdir(), 'md-diff-test-'));
@@ -239,12 +240,12 @@ test('二つのドットで始まるリポジトリ内のファイルを扱え�
 
 
 // 取得 API も CLI と同じ隔離した Git 設定で確認する
-function changes(dir: string, comparison: Comparison, paths: string[] = [], config = cleanConfig) {
+function changes(dir: string, comparison: Comparison, paths: string[] = [], config = cleanConfig, target: Target = 'markdown') {
   const previous = { global: process.env.GIT_CONFIG_GLOBAL, system: process.env.GIT_CONFIG_NOSYSTEM };
   process.env.GIT_CONFIG_GLOBAL = config;
   process.env.GIT_CONFIG_NOSYSTEM = '1';
   try {
-    return collectFileDiffs(dir, comparison, paths);
+    return collectFileDiffs(dir, comparison, paths, target);
   } finally {
     if (previous.global === undefined) delete process.env.GIT_CONFIG_GLOBAL;
     else process.env.GIT_CONFIG_GLOBAL = previous.global;
@@ -580,4 +581,78 @@ test('--help で使い方を表示する', () => {
   const r = run(tmp, ['--help']);
   assert.equal(r.status, 0);
   assert.match(r.stdout, /^使い方: git md-diff/);
+});
+
+const sourceChanges = (dir: string, comparison: Comparison = { kind: 'worktree' }, paths: string[] = []) =>
+  changes(dir, comparison, paths, cleanConfig, 'source');
+
+test('--source の対象は Markdown 以外のファイルで、バイナリは状態だけを返す', () => {
+  const dir = newRepo({ 'doc.md': 'a\n', 'app.ts': 'const a = 1;\n', 'conf.json': '{}\n', 'img.png': '\0png' });
+  write(dir, 'doc.md', 'b\n');
+  write(dir, 'app.ts', 'const a = 2;\n');
+  write(dir, 'conf.json', '{"a":1}\n');
+  write(dir, 'img.png', '\0png2');
+  sh(dir, 'mv', 'conf.json', 'settings.json');
+  const source = sourceChanges(dir, { kind: 'cached' }).concat(sourceChanges(dir));
+  assert.deepEqual(sourceChanges(dir).map((f) => f.newPath).sort(), ['app.ts', 'img.png', 'settings.json']);
+  assert.equal(source.find((f) => f.newPath === 'settings.json')!.status, 'R');
+  const app = sourceChanges(dir).find((f) => f.newPath === 'app.ts')!;
+  assert.equal(restored(app), 'const a = 2;');
+  assert.deepEqual(sourceChanges(dir).find((f) => f.newPath === 'img.png'), { status: 'M', oldPath: 'img.png', newPath: 'img.png', oldText: '', patch: '', binary: true });
+  // Markdown の対象は変わらない
+  assert.deepEqual(changes(dir, { kind: 'worktree' }).map((f) => f.newPath), ['doc.md']);
+});
+
+test('--source で大きすぎるファイルは変更前の本文を渡さない', () => {
+  const big = lines(6000, (i) => `line ${i}`);
+  const edge = lines(5000, (i) => `line ${i}`);
+  const wide = 'x'.repeat(600 * 1024) + '\n';
+  const dir = newRepo({ 'big.ts': big, 'edge.ts': edge, 'wide.txt': wide, 'small.ts': 'a\n', 'shrink.ts': big });
+  write(dir, 'big.ts', big.replace('line 10\n', 'line 10 changed\n'));
+  write(dir, 'edge.ts', edge.replace('line 10\n', 'line 10 changed\n'));
+  write(dir, 'wide.txt', wide + 'y\n');
+  write(dir, 'small.ts', 'b\n');
+  write(dir, 'shrink.ts', 'short\n');
+  write(dir, 'added.ts', big);
+  sh(dir, 'add', '-N', 'added.ts');
+  const result = Object.fromEntries(sourceChanges(dir).map((f) => [f.newPath, f]));
+  for (const path of ['big.ts', 'wide.txt', 'shrink.ts', 'added.ts']) assert.equal(result[path].oldText, null, path);
+  for (const path of ['edge.ts', 'small.ts']) assert.equal(typeof result[path].oldText, 'string', path);
+  // hunk だけの表示用の行は、変更箇所の前後だけになる
+  const [doc] = buildDocuments([result['big.ts']]);
+  assert.equal(doc.view, 'hunks');
+  assert.ok(doc.lines.length < 10);
+});
+
+test('--source で対象の競合はエラー、Markdown の表示では対象外', () => {
+  const dir = newRepo({ 'x.txt': '元\n' });
+  sh(dir, 'checkout', '-q', '-b', 'other');
+  write(dir, 'x.txt', '別\n');
+  sh(dir, 'commit', '-qam', 'other');
+  sh(dir, 'checkout', '-q', '-b', 'main-test', 'HEAD~1');
+  write(dir, 'x.txt', '本線\n');
+  sh(dir, 'commit', '-qam', 'main');
+  assert.notEqual(spawnSync('git', ['merge', 'other'], { cwd: dir, env, encoding: 'utf8' }).status, 0);
+  assert.throws(() => sourceChanges(dir), /競合中/);
+  assert.deepEqual(changes(dir, { kind: 'worktree' }), []);
+});
+
+test('CLI の --source はソースの表示で出力し、Markdown だけの変更なら差分なしとする', () => {
+  const dir = newRepo({ 'doc.md': 'a\n', 'app.ts': 'const a = 1;\n' });
+  write(dir, 'app.ts', 'const a = 2;\n');
+  let r = run(dir, ['--source', '--output', '-']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /<a href="#file-0">app\.ts<\/a>/);
+  assert.match(r.stdout, /<table class="source">/);
+  assert.doesNotMatch(r.stdout, /<input type="checkbox" id="split-toggle"/);
+  r = run(dir, ['--output', '-']);
+  assert.equal(r.stdout, '');
+  assert.match(r.stderr, /差分はありません/);
+  sh(dir, 'checkout', '--', 'app.ts');
+  write(dir, 'doc.md', 'b\n');
+  r = run(dir, ['--source', '--output', '-']);
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+  assert.match(r.stderr, /差分はありません/);
+  assert.match(run(dir, ['-h']).stdout, /--source/);
 });
