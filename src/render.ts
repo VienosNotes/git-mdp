@@ -223,6 +223,24 @@ export function renderBody(file: FileDiff, mode: Mode, split: boolean): string {
   return md.render(source, env);
 }
 
+// ソースの本文。レンダリングせず、全行を変更前・変更後の行番号付きで表示する。
+// 更新後のみの表示では変更後の行番号だけを表示する。hunk だけの表示では hunk の間に区切りを入れる
+export function renderSource(file: FileDiff, mode: Mode): string {
+  const esc = md.utils.escapeHtml;
+  const num = (n: number | null) => `<td class="ln">${n ?? ''}</td>`;
+  const rows: string[] = [];
+  let prevHunk = -1;
+  modeLines(file.lines, mode).forEach((l, i) => {
+    if (file.view === 'hunks' && l.hunk !== prevHunk) {
+      rows.push(`<tr class="hunk-sep"><td colspan="${mode === 'merged' ? 3 : 2}">${esc(file.hunks[l.hunk].header)}</td></tr>`);
+      prevHunk = l.hunk;
+    }
+    const cls = l.kind === 'same' ? '' : ` class="md-${l.kind}"`;
+    rows.push(`<tr${cls} data-l="${i}">${mode === 'merged' ? num(l.oldNo) : ''}${num(l.newNo)}<td class="code">${esc(l.text)}</td></tr>`);
+  });
+  return `<table class="source">\n${rows.join('\n')}\n</table>\n`;
+}
+
 // 標準の CSS と JS。Node では assets.ts で読み込み、ブラウザ用 JS ではビルド時に埋め込む
 export interface Assets {
   css: string;
@@ -233,11 +251,14 @@ export interface PageOptions {
   // 標準 CSS の後ろに埋め込み、色やフォントを上書きできるようにする
   customCss?: string;
   title?: string;
+  // 'source' ではソースとして表示し、「変更行を独立して表示」を出さない
+  kind?: 'markdown' | 'source';
 }
 
 // Node とブラウザのどちらでも動くよう、ファイルの読み込みなどは行わない
 export function renderPage(input: FileDiff | FileDiff[], assets: Assets, options: PageOptions = {}): string {
   const { customCss } = options;
+  const source = options.kind === 'source';
   const files = Array.isArray(input) ? input : [input];
   const esc = md.utils.escapeHtml;
   const labels = { A: '追加', D: '削除', M: '変更', R: 'リネーム' };
@@ -264,18 +285,24 @@ export function renderPage(input: FileDiff | FileDiff[], assets: Assets, options
   const section = (file: FileDiff, mode: Mode, split: boolean) =>
     `<section class="doc" data-mode="${mode}" data-split="${split}"${mode === 'merged' && split ? '' : ' hidden'}>
 <div class="gutter"></div>
-<div class="markdown-body">
-${renderBody(file, mode, split)}</div>
+<div class="${source ? 'source-body' : 'markdown-body'}">
+${source ? renderSource(file, mode) : renderBody(file, mode, split)}</div>
 <div class="doc-end"></div>
 </section>`;
   const document = (file: FileDiff, i: number) => {
     const status = statusOf(file);
-    const stateOnly = status === 'R' && file.hunks.length === 0;
-    const note = stateOnly ? '本文の変更はありません。' : file.lines.length === 0 ? '空のファイルです。' : '';
+    const stateOnly = (status === 'R' && file.hunks.length === 0) || file.view === 'binary';
+    const note = file.view === 'binary' ? 'バイナリファイルのため表示しません。'
+      : file.view === 'hunks' ? 'ファイルが大きいため、差分の前後だけを表示しています。'
+      : stateOnly ? '本文の変更はありません。' : file.lines.length === 0 ? '空のファイルです。' : '';
+    // ソースには段落がないため、変更行の分割の有無で本文は変わらない
+    const sections = source
+      ? section(file, 'merged', true) + section(file, 'new', true)
+      : section(file, 'merged', true) + section(file, 'merged', false) + section(file, 'new', true) + section(file, 'new', false);
     return `<article class="file${collapsed(file) ? ' collapsed' : ''}" id="file-${i}" data-file="${i}">
 <header class="file-header">${collapseButton(file)}<h2>${esc(file.path)}</h2><span class="file-status">${labels[status]}</span><span class="hunk-count">${file.hunks.length} hunks</span></header>
 ${note ? `<p class="file-note">${note}</p>` : ''}
-${stateOnly ? '' : section(file, 'merged', true) + section(file, 'merged', false) + section(file, 'new', true) + section(file, 'new', false)}
+${stateOnly ? '' : sections}
 </article>`;
   };
   // 削除されたファイルは折りたたんだ状態で表示する
@@ -302,8 +329,7 @@ ${customCss}
 <span>${files.length} ファイル / ${hunkCount} hunks</span>
 <span id="current-file" aria-live="polite"></span>
 <span class="hunk-nav"><button type="button" id="prev-hunk">◀ 前の hunk</button><button type="button" id="next-hunk">次の hunk ▶</button></span>
-<label><input type="checkbox" id="split-toggle" checked> 変更行を独立して表示</label>
-<button type="button" id="mode-toggle"></button>
+${source ? '' : '<label><input type="checkbox" id="split-toggle" checked> 変更行を独立して表示</label>\n'}<button type="button" id="mode-toggle"></button>
 </header>
 <nav class="file-list" aria-label="変更ファイル"><ul>
 ${files.map((file, i) => `<li data-file="${i}"${collapsed(file) ? ' class="collapsed"' : ''}><a href="#file-${i}">${esc(file.path)}</a> <span class="file-status">${labels[statusOf(file)]}</span></li>`).join('\n')}

@@ -35,3 +35,13 @@ test('ブラウザ用 JS が CLI と同じ HTML を生成する', () => {
   assert.equal(html, renderPage(buildDocuments(changes), loadAssets(), { title: data.title }));
   assert.match(html, /<title>PR のタイトル #12 - md-diff<\/title>/);
 });
+
+test('ブラウザ用 JS がソースの表示でも CLI と同じ HTML を生成する', () => {
+  const src = (f: string) => readFileSync(join('fixtures-source', 'app', f), 'utf8');
+  const files: FileChange[] = [
+    { status: 'M', oldPath: 'app.ts', newPath: 'app.ts', oldText: src('before.ts'), patch: src('diff.patch') },
+    { status: 'M', oldPath: 'big.ts', newPath: 'big.ts', oldText: null, patch: src('diff.patch') },
+    { status: 'A', oldPath: null, newPath: 'a.png', oldText: '', patch: '', binary: true },
+  ];
+  assert.equal(web.renderMarkdownDiff({ kind: 'source', files }), renderPage(buildDocuments(files), loadAssets(), { kind: 'source' }));
+});

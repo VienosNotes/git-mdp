@@ -1,7 +1,7 @@
 // フィクスチャから検証用の HTML を out/ に生成する
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { FileChange } from './changes.js';
+import { buildDocuments, type FileChange } from './changes.js';
 import { buildFileDiff, type FileDiff } from './diff.js';
 import { loadAssets } from './assets.js';
 import { renderPage } from './render.js';
@@ -62,3 +62,15 @@ document.getElementById('md-diff').srcdoc = MdDiff.renderMarkdownDiff(data);
 </html>
 `);
 console.error('out/web-demo.html');
+
+// ソースの表示のサンプル（全文、大きすぎるファイル、バイナリ、追加、削除）
+const src = (f: string) => readFileSync(join('fixtures-source', 'app', f), 'utf8');
+const sourceChanges: FileChange[] = [
+  { status: 'M', oldPath: 'app.ts', newPath: 'app.ts', oldText: src('before.ts'), patch: src('diff.patch') },
+  { status: 'M', oldPath: 'large.ts', newPath: 'large.ts', oldText: null, patch: src('diff.patch') },
+  { status: 'M', oldPath: 'logo.png', newPath: 'logo.png', oldText: '', patch: '', binary: true },
+  { status: 'A', oldPath: null, newPath: 'new.ts', oldText: '', patch: '@@ -0,0 +1,2 @@\n+export const a = 1;\n+export const b = 2;\n' },
+  { status: 'D', oldPath: 'old.ts', newPath: null, oldText: 'export const x = 0;\n', patch: '@@ -1 +0,0 @@\n-export const x = 0;\n' },
+];
+writeFileSync('out/source.html', renderPage(buildDocuments(sourceChanges), loadAssets(), { kind: 'source' }));
+console.error('out/source.html');

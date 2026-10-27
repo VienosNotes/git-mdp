@@ -94,6 +94,14 @@ main { max-width: 960px; margin: 0 auto; padding: 16px 16px 80vh; }
 .md-del { background: var(--del-bg); color: var(--del-fg); text-decoration: line-through; text-decoration-color: rgba(130, 7, 30, 0.4); }
 .md-add { background: var(--add-bg); }
 .md-code-line { display: inline-block; min-width: 100%; }
+
+/* ソースの本文。行番号は選択・コピーの対象にしない */
+.source { width: 100%; border-collapse: collapse; font-family: ui-monospace, Consolas, monospace; font-size: 13px; line-height: 1.5; }
+.source td { padding: 0 8px; vertical-align: top; }
+.source .ln { width: 1%; text-align: right; color: var(--muted); white-space: nowrap; user-select: none; -webkit-user-select: none; }
+.source .code { white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
+.source tr.md-del { text-decoration: none; }
+.source .hunk-sep td { padding: 4px 8px; background: var(--code-bg); color: var(--muted); }
 .md-focus { outline: 2px solid var(--mix); outline-offset: 2px; }
 
 /* diff ポップアップ */

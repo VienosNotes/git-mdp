@@ -20,6 +20,7 @@ export interface Hunk {
   header: string;
   oldStart: number;
   oldCount: number;
+  newStart: number;
   lines: HunkLine[];
 }
 
@@ -32,6 +33,8 @@ export interface FileDiff {
   };
   hunks: Hunk[];
   lines: DocLine[];
+  // 'hunks'：大きすぎるため hunk の行だけを持つ。'binary'：バイナリのため本文を持たない
+  view?: 'hunks' | 'binary';
 }
 
 const HUNK_HEADER = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
@@ -66,6 +69,7 @@ export function parsePatch(patch: string): Hunk[] {
         header: line,
         oldStart: Number(m[1]),
         oldCount: m[2] === undefined ? 1 : Number(m[2]),
+        newStart: Number(m[3]),
         lines: [],
       };
       oldLeft = current.oldCount;
@@ -116,6 +120,23 @@ export function buildLines(oldText: string, hunks: Hunk[]): DocLine[] {
 export function buildFileDiff(path: string, oldText: string, patch: string): FileDiff {
   const hunks = parsePatch(patch);
   return { path, hunks, lines: buildLines(oldText, hunks) };
+}
+
+// 変更前の本文がない場合（大きすぎるファイル）は、hunk の行だけを並べる。
+// 行番号は hunk ヘッダーの開始行から数える
+export function buildHunkLines(hunks: Hunk[]): DocLine[] {
+  const result: DocLine[] = [];
+  hunks.forEach((h, hi) => {
+    let oldNo = h.oldStart;
+    let newNo = h.newStart;
+    for (const l of h.lines) {
+      if (l.mark === '\\') continue;
+      if (l.mark === '-') result.push({ kind: 'del', text: l.text, oldNo: oldNo++, newNo: null, hunk: hi });
+      else if (l.mark === '+') result.push({ kind: 'add', text: l.text, oldNo: null, newNo: newNo++, hunk: hi });
+      else result.push({ kind: 'same', text: l.text, oldNo: oldNo++, newNo: newNo++, hunk: hi });
+    }
+  });
+  return result;
 }
 
 // 更新後の本文（末尾改行の有無は区別しない）
