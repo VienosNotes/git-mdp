@@ -253,7 +253,7 @@ function changes(dir: string, comparison: Comparison, paths: string[] = [], conf
   }
 }
 
-const restored = (f: ReturnType<typeof changes>[number]) => newText(buildFileDiff(f.newPath ?? f.oldPath!, f.oldText, f.patch).lines);
+const restored = (f: ReturnType<typeof changes>[number]) => newText(buildFileDiff(f.newPath ?? f.oldPath!, f.oldText!, f.patch).lines);
 
 test('cached で追加・削除・リネームを列挙し、本文変更なしも保持する', () => {
   const dir = newRepo({ 'old.md': '移動する本文\n', 'delete.md': '削除する本文\n', 'keep.md': '維持\n' });
@@ -275,7 +275,7 @@ test('cached で追加・削除・リネームを列挙し、本文変更なし�
   const renamed = result.find((f) => f.status === 'R')!;
   assert.equal(renamed.oldPath, 'old.md');
   assert.equal(renamed.newPath, 'new.md');
-  assert.equal(buildFileDiff('new.md', renamed.oldText, renamed.patch).hunks.length, 0);
+  assert.equal(buildFileDiff('new.md', renamed.oldText!, renamed.patch).hunks.length, 0);
   assert.equal(restored(renamed), '移動する本文');
   for (const path of ['old.md', 'new.md']) assert.deepEqual(changes(dir, { kind: 'cached' }, [path]), [renamed]);
 });
@@ -334,7 +334,7 @@ test('拡張子をまたぐリネームと本文変更を取得できる', () =>
   assert.ok(result.every((f) => f.status === 'R'));
   const modified = result.find((f) => f.newPath === 'new.md')!;
   assert.equal(restored(modified), body.replace('本文 10', '本文 10 改').trimEnd());
-  assert.equal(buildFileDiff('new.md', modified.oldText, modified.patch).hunks.length, 1);
+  assert.equal(buildFileDiff('new.md', modified.oldText!, modified.patch).hunks.length, 1);
 });
 
 test('初回コミット前の cached は空のツリーと比較する', () => {

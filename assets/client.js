@@ -10,11 +10,13 @@
   let pinned = null; // 固定中のファイル番号と hunk 番号
   let hideTimer = 0;
 
-  const docOf = (file) => file.querySelector(`.doc[data-mode="${mode}"][data-split="${splitToggle.checked}"]`);
+  // ソースの表示には「変更行を独立して表示」がなく、本文は分割ありの 1 通りだけ
+  const split = () => String(splitToggle ? splitToggle.checked : true);
+  const docOf = (file) => file.querySelector(`.doc[data-mode="${mode}"][data-split="${split()}"]`);
 
   // マークを置く候補の要素と、その行範囲
   function candidates(doc) {
-    return [...doc.querySelectorAll('.markdown-body [data-ls], .markdown-body [data-l]')].map((el) => {
+    return [...doc.querySelectorAll('.markdown-body [data-ls], .markdown-body [data-l], .source-body [data-l]')].map((el) => {
       const ls = Number(el.dataset.ls ?? el.dataset.l);
       const le = el.dataset.le !== undefined ? Number(el.dataset.le) : ls + 1;
       return { el, ls, le };
@@ -164,7 +166,7 @@
   function setMode(m) {
     mode = m;
     for (const doc of document.querySelectorAll('.doc')) {
-      doc.hidden = doc.dataset.mode !== mode || doc.dataset.split !== String(splitToggle.checked);
+      doc.hidden = doc.dataset.mode !== mode || doc.dataset.split !== split();
     }
     toggle.textContent = `表示: ${MODE_LABEL[m]}（切り替え）`;
     document.body.dataset.mode = m;
@@ -265,7 +267,7 @@
   }, { passive: true });
 
   toggle.addEventListener('click', () => setMode(mode === 'merged' ? 'new' : 'merged'));
-  splitToggle.addEventListener('change', () => setMode(mode));
+  splitToggle?.addEventListener('change', () => setMode(mode));
   new ResizeObserver(() => {
     layout();
     updateNav();
