@@ -1,0 +1,21 @@
+diff --git a/xaml/before.xaml b/xaml/after.xaml
+index 0973c3e..99766e1 100644
+--- a/xaml/before.xaml
++++ b/xaml/after.xaml
+@@ -1,13 +1,13 @@
+ <Window x:Class="Sample.MainWindow"
+         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+-        Title="注文" Height="450" Width="800">
++        Title="注文" Height="600" Width="800">
+     <!--
+       注文の一覧。
+-      並び順は日付の降順。
++      並び順は金額の降順。
+     -->
+     <Grid Margin="8">
+-        <DataGrid ItemsSource="{Binding Orders}" AutoGenerateColumns="False" />
++        <DataGrid ItemsSource="{Binding Orders}" AutoGenerateColumns="False" IsReadOnly="True" />
+         <TextBlock Text="&lt;なし&gt;" Visibility="Collapsed" />
+     </Grid>
+ </Window>

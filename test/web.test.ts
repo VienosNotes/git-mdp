@@ -37,11 +37,15 @@ test('ブラウザ用 JS が CLI と同じ HTML を生成する', () => {
 });
 
 test('ブラウザ用 JS がソースの表示でも CLI と同じ HTML を生成する', () => {
-  const src = (f: string) => readFileSync(join('fixtures-source', 'app', f), 'utf8');
+  const src = (f: string, dir = 'app') => readFileSync(join('fixtures-source', dir, f), 'utf8');
   const files: FileChange[] = [
     { status: 'M', oldPath: 'app.ts', newPath: 'app.ts', oldText: src('before.ts'), patch: src('diff.patch') },
+    { status: 'M', oldPath: 'a.cs', newPath: 'a.cs', oldText: src('before.cs', 'cs'), patch: src('diff.patch', 'cs') },
+    { status: 'M', oldPath: 'b.cs', newPath: 'b.cs', oldText: null, patch: src('diff.patch', 'cs') },
     { status: 'M', oldPath: 'big.ts', newPath: 'big.ts', oldText: null, patch: src('diff.patch') },
     { status: 'A', oldPath: null, newPath: 'a.png', oldText: '', patch: '', binary: true },
   ];
-  assert.equal(web.renderMarkdownDiff({ kind: 'source', files }), renderPage(buildDocuments(files), loadAssets(), { kind: 'source' }));
+  const html = web.renderMarkdownDiff({ kind: 'source', files });
+  assert.match(html, /class="hljs-keyword"/);
+  assert.equal(html, renderPage(buildDocuments(files), loadAssets(), { kind: 'source' }));
 });

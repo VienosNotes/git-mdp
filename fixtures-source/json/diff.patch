@@ -1,0 +1,17 @@
+diff --git a/json/before.json b/json/after.json
+index 4220b0c..22ce7ea 100644
+--- a/json/before.json
++++ b/json/after.json
+@@ -1,8 +1,8 @@
+ {
+   "name": "sample",
+-  "version": "1.0.0",
+-  "enabled": true,
++  "version": "1.1.0",
++  "enabled": false,
+   "retry": 3,
+-  "tags": ["a", "b"],
+-  "endpoint": null
++  "tags": ["a", "b", "<c>"],
++  "endpoint": "https://example.com/api"
+ }
