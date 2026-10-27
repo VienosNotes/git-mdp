@@ -1,0 +1,33 @@
+diff --git a/cs/before.cs b/cs/after.cs
+index a158c38..cec7b4c 100644
+--- a/cs/before.cs
++++ b/cs/after.cs
+@@ -5,17 +5,17 @@ namespace Sample
+ {
+     /*
+      * 注文を処理する。
+-     * 在庫の確認は呼び出し側で行う。
++     * 在庫の確認と価格の計算は呼び出し側で行う。
+      */
+     public sealed class OrderService
+     {
+         private const string Query = @"
+-SELECT id, name
++SELECT id, name, total
+ FROM orders
+ WHERE status = 'open'";
+ 
+         // 件数の上限
+-        private readonly int _limit = 100;
++        private readonly int _limit = 200;
+ 
+         public async Task<int> CountAsync(string name)
+         {
+@@ -24,6 +24,6 @@ WHERE status = 'open'";
+             return await Task.FromResult(_limit);
+         }
+ 
+-        public bool IsValid(string s) => s.Length > 0 && s != "<script>";
++        public bool IsValid(string s) => !string.IsNullOrEmpty(s) && s != "<script>";
+     }
+ }

@@ -16,6 +16,7 @@
     "sample": "tsc && npm run build:web && node dist/src/sample.js"
   },
   "dependencies": {
+    "highlight.js": "^11.12.0",
     "markdown-it": "^14.1.0"
   },
   "devDependencies": {

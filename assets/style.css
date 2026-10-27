@@ -9,6 +9,14 @@
   --add-fg: #116329;
   --mix: #9a6700;
   --code-bg: #f6f8fa;
+  /* ソースのシンタックスハイライト。削除・追加の背景色の上でもコントラスト比 4.5 以上 */
+  --hl-comment: #57606a;
+  --hl-keyword: #cf222e;
+  --hl-title: #6639ba;
+  --hl-constant: #0550ae;
+  --hl-string: #0a3069;
+  --hl-type: #953800;
+  --hl-tag: #116329;
   --gutter: 56px;
 }
 
@@ -102,6 +110,13 @@ main { max-width: 960px; margin: 0 auto; padding: 16px 16px 80vh; }
 .source .code { white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4; }
 .source tr.md-del { text-decoration: none; }
 .source .hunk-sep td { padding: 4px 8px; background: var(--code-bg); color: var(--muted); }
+.source .hljs-comment, .source .hljs-quote { color: var(--hl-comment); }
+.source .hljs-keyword, .source .hljs-doctag, .source .hljs-meta .hljs-keyword { color: var(--hl-keyword); }
+.source .hljs-title { color: var(--hl-title); }
+.source .hljs-literal, .source .hljs-number, .source .hljs-attr, .source .hljs-attribute, .source .hljs-meta, .source .hljs-variable { color: var(--hl-constant); }
+.source .hljs-string, .source .hljs-regexp, .source .hljs-meta .hljs-string { color: var(--hl-string); }
+.source .hljs-built_in, .source .hljs-type, .source .hljs-symbol, .source .hljs-bullet { color: var(--hl-type); }
+.source .hljs-name, .source .hljs-section, .source .hljs-selector-tag { color: var(--hl-tag); }
 .md-focus { outline: 2px solid var(--mix); outline-offset: 2px; }
 
 /* diff ポップアップ */

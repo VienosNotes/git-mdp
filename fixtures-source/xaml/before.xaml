@@ -1,0 +1,13 @@
+<Window x:Class="Sample.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="注文" Height="450" Width="800">
+    <!--
+      注文の一覧。
+      並び順は日付の降順。
+    -->
+    <Grid Margin="8">
+        <DataGrid ItemsSource="{Binding Orders}" AutoGenerateColumns="False" />
+        <TextBlock Text="&lt;なし&gt;" Visibility="Collapsed" />
+    </Grid>
+</Window>

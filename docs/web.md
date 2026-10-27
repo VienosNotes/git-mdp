@@ -9,7 +9,7 @@ npm ci
 npm run build:web   # dist/web/md-diff.js を生成する
 ```
 
-- esbuild で `src/web.ts` を一つのファイルにまとめる。markdown-it と、`assets/` の標準 CSS・JS も含まれる。
+- esbuild で `src/web.ts` を一つのファイルにまとめる。markdown-it、highlight.js（ソースの色付けに使う言語だけ）と、`assets/` の標準 CSS・JS も含まれる。
 - 読み込むと、グローバル変数 `MdDiff` が定義される。依存する他のファイルはない。
 
 ## API

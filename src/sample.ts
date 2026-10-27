@@ -63,10 +63,14 @@ document.getElementById('md-diff').srcdoc = MdDiff.renderMarkdownDiff(data);
 `);
 console.error('out/web-demo.html');
 
-// ソースの表示のサンプル（全文、大きすぎるファイル、バイナリ、追加、削除）
-const src = (f: string) => readFileSync(join('fixtures-source', 'app', f), 'utf8');
+// ソースの表示のサンプル（全文、色付けする言語、大きすぎるファイル、バイナリ、追加、削除）
+const src = (f: string, dir = 'app') => readFileSync(join('fixtures-source', dir, f), 'utf8');
 const sourceChanges: FileChange[] = [
   { status: 'M', oldPath: 'app.ts', newPath: 'app.ts', oldText: src('before.ts'), patch: src('diff.patch') },
+  { status: 'M', oldPath: 'OrderService.cs', newPath: 'OrderService.cs', oldText: src('before.cs', 'cs'), patch: src('diff.patch', 'cs') },
+  { status: 'M', oldPath: 'MainWindow.xaml', newPath: 'MainWindow.xaml', oldText: src('before.xaml', 'xaml'), patch: src('diff.patch', 'xaml') },
+  { status: 'M', oldPath: 'settings.json', newPath: 'settings.json', oldText: src('before.json', 'json'), patch: src('diff.patch', 'json') },
+  { status: 'M', oldPath: 'Large.cs', newPath: 'Large.cs', oldText: null, patch: src('diff.patch', 'cs') },
   { status: 'M', oldPath: 'large.ts', newPath: 'large.ts', oldText: null, patch: src('diff.patch') },
   { status: 'M', oldPath: 'logo.png', newPath: 'logo.png', oldText: '', patch: '', binary: true },
   { status: 'A', oldPath: null, newPath: 'new.ts', oldText: '', patch: '@@ -0,0 +1,2 @@\n+export const a = 1;\n+export const b = 2;\n' },

@@ -2,6 +2,7 @@
 import MarkdownIt from 'markdown-it';
 import type Token from 'markdown-it/lib/token.mjs';
 import type { DocLine, FileDiff, LineKind } from './diff.js';
+import { highlightFile } from './highlight.js';
 
 export type Mode = 'merged' | 'new';
 
@@ -230,13 +231,16 @@ export function renderSource(file: FileDiff, mode: Mode): string {
   const num = (n: number | null) => `<td class="ln">${n ?? ''}</td>`;
   const rows: string[] = [];
   let prevHunk = -1;
+  // 対象の言語では色付けした HTML（エスケープ済み）を使う
+  const highlighted = highlightFile(file);
+  const html = new Map(file.lines.map((l, i) => [l, highlighted[i]]));
   modeLines(file.lines, mode).forEach((l, i) => {
     if (file.view === 'hunks' && l.hunk !== prevHunk) {
       rows.push(`<tr class="hunk-sep"><td colspan="${mode === 'merged' ? 3 : 2}">${esc(file.hunks[l.hunk].header)}</td></tr>`);
       prevHunk = l.hunk;
     }
     const cls = l.kind === 'same' ? '' : ` class="md-${l.kind}"`;
-    rows.push(`<tr${cls} data-l="${i}">${mode === 'merged' ? num(l.oldNo) : ''}${num(l.newNo)}<td class="code">${esc(l.text)}</td></tr>`);
+    rows.push(`<tr${cls} data-l="${i}">${mode === 'merged' ? num(l.oldNo) : ''}${num(l.newNo)}<td class="code">${html.get(l) ?? esc(l.text)}</td></tr>`);
   });
   return `<table class="source">\n${rows.join('\n')}\n</table>\n`;
 }

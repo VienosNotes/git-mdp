@@ -1,0 +1,8 @@
+{
+  "name": "sample",
+  "version": "1.0.0",
+  "enabled": true,
+  "retry": 3,
+  "tags": ["a", "b"],
+  "endpoint": null
+}
