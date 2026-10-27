@@ -656,3 +656,18 @@ test('CLI の --source はソースの表示で出力し、Markdown だけの変
   assert.match(r.stderr, /差分はありません/);
   assert.match(run(dir, ['-h']).stdout, /--source/);
 });
+
+test('サブモジュールの変更は "Subproject commit" の一行として扱う', () => {
+  const [a, b] = ['3e4d9e1316c20f9ce21846b80ef11b5e7fb288b9', '8cf7539e786d7302d59c4cdf23a70fa891e6e12d'];
+  const dir = newRepo({ 'app.ts': 'a\n' });
+  sh(dir, 'update-index', '--add', '--cacheinfo', `160000,${a},lib`);
+  sh(dir, 'commit', '-qm', 'サブモジュールを追加');
+  sh(dir, 'update-index', '--cacheinfo', `160000,${b},lib`);
+  const [modified] = sourceChanges(dir, { kind: 'cached' });
+  assert.equal(modified.oldText, `Subproject commit ${a}\n`);
+  assert.equal(restored(modified), `Subproject commit ${b}`);
+  const [added] = sourceChanges(dir, { kind: 'three-dot', base: 'HEAD~1', tip: 'HEAD' }).filter((f) => f.newPath === 'lib');
+  assert.equal(added.status, 'A');
+  assert.equal(restored(added), `Subproject commit ${a}`);
+  assert.equal(run(dir, ['--source', '--cached', '--output', '-']).status, 0);
+});

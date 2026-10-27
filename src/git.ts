@@ -175,6 +175,13 @@ export function collectFileDiffs(root: string, comparison: Comparison, paths: st
       }
       throw new GitError(`バイナリファイルには対応していません: ${c.newPath ?? c.oldPath}`);
     }
+    // サブモジュールの本文（コミット）はこのリポジトリにないため、git diff と同じく
+    // "Subproject commit <ID>" の一行を変更前の本文とする
+    if (/^(index \S+ 160000|(new|deleted) file mode 160000)$/m.test(patches[i])) {
+      const old = /^-(Subproject commit \S+)$/m.exec(patches[i]);
+      result.push({ ...c, status, oldText: old ? `${old[1]}\n` : '', patch: patches[i] });
+      return;
+    }
     const blob = `${source}:${c.oldPath}`;
     // 大きすぎる変更前の本文は読み込まない
     if (target === 'source' && c.oldPath !== null && Number(git(['cat-file', '-s', blob], root)) > LARGE_BYTES) {
