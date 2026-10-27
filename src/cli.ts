@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// git md-diff：Markdown の差分をレンダリングした HTML を生成する
+// git md-diff：Markdown（--source ではそれ以外）の差分を全文の HTML で表示する
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -14,6 +14,7 @@ class UsageError extends Error {}
 const HELP = `使い方: git md-diff [--cached | <リビジョン> | <base>...<tip>] [オプション] [-- <パス>...]
 
 Markdown 文書の差分を、レンダリングした HTML で表示する。
+--source を指定すると、Markdown 以外のファイルの差分を、行番号付きの全文で表示する。
 
 比較対象:
   （指定なし）        index と作業ツリー
@@ -27,6 +28,7 @@ Markdown 文書の差分を、レンダリングした HTML で表示する。
   --open              保存後に既定のブラウザで開く
   --no-open           ブラウザを起動しない。一時ファイルの場合はそのパスを標準出力に出す
   --css <ファイル>    標準 CSS の後ろに追加する CSS
+  --source            Markdown 以外のファイルを対象にする
   -h, --help          この説明を表示する
 
 出力先を省略すると一時ファイルに保存し、既定のブラウザで開く。一時ファイルは削除しない。
@@ -37,6 +39,7 @@ interface Options {
   output?: string;
   open?: boolean;
   css?: string;
+  source: boolean;
   paths: string[];
   comparison: Comparison;
 }
@@ -49,6 +52,7 @@ function parseArgs(argv: string[]): Options {
   let css: string | undefined;
   let open: boolean | undefined;
   let help = false;
+  let source = false;
   let cached = false;
   let revision: string | undefined;
   // 値を取るオプション。二回指定は誤りとする
@@ -69,6 +73,8 @@ function parseArgs(argv: string[]): Options {
       open = a === '--open';
     } else if (a === '-h' || a === '--help') {
       help = true;
+    } else if (a === '--source') {
+      source = true;
     } else if (a === '--cached') {
       cached = true;
     } else if (!a.startsWith('-')) {
@@ -90,7 +96,7 @@ function parseArgs(argv: string[]): Options {
       comparison = { kind: 'three-dot', base: parts[0], tip: parts[1] };
     } else comparison = { kind: 'revision', ref: revision };
   }
-  return { help, output, open, css, paths, comparison };
+  return { help, output, open, css, source, paths, comparison };
 }
 
 async function main(argv: string[]): Promise<number> {
@@ -112,12 +118,12 @@ async function main(argv: string[]): Promise<number> {
   }
   const root = repoRoot(cwd);
   const paths = opts.paths.map((path) => toRepoPath(root, cwd, path));
-  const files = collectFileDiffs(root, opts.comparison, paths);
+  const files = collectFileDiffs(root, opts.comparison, paths, opts.source ? 'source' : 'markdown');
   if (files.length === 0) {
     console.error('差分はありません');
     return 0;
   }
-  const html = renderPage(buildDocuments(files), loadAssets(), { customCss: css });
+  const html = renderPage(buildDocuments(files), loadAssets(), { customCss: css, kind: opts.source ? 'source' : 'markdown' });
   if (opts.output === '-') {
     // head などで読み取り側が先に閉じても、エラーを表示せずに終わる
     process.stdout.on('error', (e: NodeJS.ErrnoException) => {

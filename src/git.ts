@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 import type { FileChange } from './changes.js';
+import { parsePatch } from './diff.js';
 
 export class GitError extends Error {}
 
@@ -84,11 +85,39 @@ function resolveComparison(root: string, comparison: Comparison): { source: stri
 }
 
 const isMarkdown = (path: string | null) => path !== null && /\.(md|markdown)$/i.test(path);
+
+// 'markdown' は Markdown のファイル、'source' はそれ以外のファイルを対象にする（--source）
+export type Target = 'markdown' | 'source';
+
+// ソースの表示で、全文を表示せず hunk だけを表示するファイルの大きさ（変更前または変更後）
+const LARGE_LINES = 5000;
+const LARGE_BYTES = 512 * 1024;
 const matchesPaths = (path: string | null, paths: string[]) => path !== null &&
   (paths.length === 0 || paths.some((p) => p === '.' || path === p || path.startsWith(`${p}/`)));
 
+// 変更前または変更後が大きすぎるか。変更後の大きさは、変更前の本文とパッチの増減から求める
+function isLarge(oldText: string, patch: string): boolean {
+  const size = (text: string) => Buffer.byteLength(text, 'utf8') + 1;
+  let lines = oldText === '' ? 0 : oldText.split('\n').length - (oldText.endsWith('\n') ? 1 : 0);
+  let bytes = Buffer.byteLength(oldText, 'utf8');
+  if (lines > LARGE_LINES || bytes > LARGE_BYTES) return true;
+  for (const hunk of parsePatch(patch)) {
+    for (const l of hunk.lines) {
+      if (l.mark === '+') {
+        lines++;
+        bytes += size(l.text);
+      } else if (l.mark === '-') {
+        lines--;
+        bytes -= size(l.text);
+      }
+    }
+  }
+  return lines > LARGE_LINES || bytes > LARGE_BYTES;
+}
+
 // リネーム検出は全体に対して行い、その後で変更前後どちらかのパスで絞り込む
-export function collectFileDiffs(root: string, comparison: Comparison, paths: string[] = []): ChangedFile[] {
+export function collectFileDiffs(root: string, comparison: Comparison, paths: string[] = [], target: Target = 'markdown'): ChangedFile[] {
+  const isTarget = (path: string | null) => path !== null && isMarkdown(path) === (target === 'markdown');
   const { source, revisions } = resolveComparison(root, comparison);
   const args = ['diff', ...DIFF_OPTIONS, ...revisions];
   const fields = git([...args, '--name-status', '-z', '--'], root).split('\0');
@@ -106,8 +135,9 @@ export function collectFileDiffs(root: string, comparison: Comparison, paths: st
       changes.push({ status, oldPath: status === 'A' ? null : path, newPath: status === 'D' ? null : path });
     }
   }
+  // Markdown は変更前後のどちらかが Markdown なら対象。ソースはそれ以外のすべて
   const selected = (c: typeof changes[number]) =>
-    (isMarkdown(c.oldPath) || isMarkdown(c.newPath)) &&
+    (target === 'markdown' ? isMarkdown(c.oldPath) || isMarkdown(c.newPath) : !isMarkdown(c.oldPath) && !isMarkdown(c.newPath)) &&
     (matchesPaths(c.oldPath, paths) || matchesPaths(c.newPath, paths));
   // 競合中は diff に現れない場合もあるため、index を別途調べる
   const conflictPaths = new Set<string>();
@@ -116,7 +146,7 @@ export function collectFileDiffs(root: string, comparison: Comparison, paths: st
     for (const entry of conflicts) {
       const path = entry.slice(entry.indexOf('\t') + 1);
       conflictPaths.add(path);
-      if (isMarkdown(path) && matchesPaths(path, paths)) {
+      if (isTarget(path) && matchesPaths(path, paths)) {
         throw new GitError(`競合中のファイルには対応していません: ${path}`);
       }
     }
@@ -136,11 +166,24 @@ export function collectFileDiffs(root: string, comparison: Comparison, paths: st
     if (!['A', 'D', 'M', 'R'].includes(c.status)) {
       throw new GitError(`未対応の変更種別です: ${c.status} ${c.newPath ?? c.oldPath}`);
     }
+    const status = c.status as ChangedFile['status'];
     if (/^(Binary files .* differ|GIT binary patch)$/m.test(patches[i])) {
+      // ソースではバイナリも珍しくないため、エラーにせず状態だけを表示する
+      if (target === 'source') {
+        result.push({ ...c, status, oldText: '', patch: '', binary: true });
+        return;
+      }
       throw new GitError(`バイナリファイルには対応していません: ${c.newPath ?? c.oldPath}`);
     }
-    const oldText = c.oldPath === null ? '' : git(['cat-file', 'blob', `${source}:${c.oldPath}`], root);
-    result.push({ ...c, status: c.status as ChangedFile['status'], oldText, patch: patches[i] });
+    const blob = `${source}:${c.oldPath}`;
+    // 大きすぎる変更前の本文は読み込まない
+    if (target === 'source' && c.oldPath !== null && Number(git(['cat-file', '-s', blob], root)) > LARGE_BYTES) {
+      result.push({ ...c, status, oldText: null, patch: patches[i] });
+      return;
+    }
+    const oldText = c.oldPath === null ? '' : git(['cat-file', 'blob', blob], root);
+    const large = target === 'source' && isLarge(oldText, patches[i]);
+    result.push({ ...c, status, oldText: large ? null : oldText, patch: patches[i] });
   });
   return result;
 }
