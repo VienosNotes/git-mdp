@@ -58,7 +58,7 @@ Markdown の表示と同様に、各フェーズのゲートを満たしてか�
 |---|---|---|---|
 | S1. ソースの表示（git-mdp） | 固定データから生成するソースの差分の HTML | 全文表示・hunk だけの表示・バイナリの表示ができ、Markdown の表示が変わらない | **完了** |
 | S2. CLI の `--source`（git-mdp） | `git md-diff --source` | 指定した比較対象の Markdown 以外のファイルを漏れなく表示できる | **完了** |
-| S3. Source Diff タブ（プラグイン） | Source Diff タブと表示画面 | PR 画面から開いて、S1 と同じ表示を確認できる | 未着手 |
+| S3. Source Diff タブ（プラグイン） | Source Diff タブと表示画面 | PR 画面から開いて、S1 と同じ表示を確認できる | **完了** |
 | S4. 実運用での受け入れ | 判定基準の調整と文書 | 実際の PR のレビュー補助として使える | 未着手 |
 
 ## フェーズ S1：ソースの表示（git-mdp）
@@ -130,6 +130,12 @@ Markdown の表示と同様に、各フェーズのゲートを満たしてか�
 - PR 画面に「Source Diff」タブが表示され、Markdown Diff の対象外のファイルがすべて表示される。
 - バイナリと大きすぎるファイルを含む PR でも表示できる。
 - Markdown Diff の動作が変わらない。
+
+### 結果：完了
+
+- gitbucket-mdp-plugin の PR #2 で実装した。`/:owner/:repository/pull/:id/source-diff` を追加し、表示画面と閲覧権限の確認は Markdown Diff と共用する。バイナリと大きすぎるファイルの扱いは S2 と同じ基準で Scala に実装した。
+- 作業環境の GitBucket 4.48.0 で、プラグインの `test/check.sh`（ソースの PR を追加）の全項目と、Chromium での表示・操作を確認した。
+- 利用者の GitBucket で、サブモジュールの変更を含む PR の Source Diff が失敗した。参照先のコミットがリポジトリにないのに、変更前の本文として読み込もうとしていたため。CLI（`--source`）にも同じ問題があった。`git diff` と同じく `Subproject commit <ID>` の一行として扱うよう、プラグイン（PR #2）と CLI（PR #15）を修正し、利用者の GitBucket で動作を確認した。
 
 ## フェーズ S4：実運用での受け入れ
 
